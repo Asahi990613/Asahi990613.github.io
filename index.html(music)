@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的音樂網頁</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="content-container">
+        <h1>歡迎來到我的音樂空間</h1>
+        <!-- 在這裡放入您的音訊播放器 -->
+        <audio controls>
+            <source src="my_song.mp3" type="audio/mpeg">
+            您的瀏覽器不支援音訊元素。
+        </audio>
+    </div>
+
+</body>
+</html>
