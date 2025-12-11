@@ -96,6 +96,17 @@ function drawMonster(mon){ ctx.fillStyle=mon.color; ctx.fillRect(mon.x*tileSize,
 
 function drawNPC(npc){ ctx.fillStyle="#ff00ff"; ctx.fillRect(npc.x*tileSize, npc.y*tileSize, tileSize, tileSize); }
 
+let skillAnimations=[];
+function drawSkillAnimations(){
+  skillAnimations.forEach((s,i)=>{
+    s.y -= 2;
+    s.frame++;
+    ctx.fillStyle=`rgb(${255-s.frame*15},0,0)`;
+    ctx.fillRect(s.x + tileSize/2 - s.size/2, s.y, s.size, s.size);
+    if(s.frame>15) skillAnimations.splice(i,1);
+  });
+}
+
 function draw(){
   ctx.clearRect(0,0,640,640);
   drawMap();
@@ -127,18 +138,12 @@ function startBattle(monster){
   document.getElementById("battleUI").style.display="block";
 }
 
-// 普通攻擊
-document.getElementById("attackBtn").onclick=()=>{
-  dealDamage(player.atk);
-}
-
-// 技能攻擊（華麗動畫）
+document.getElementById("attackBtn").onclick=()=>{ dealDamage(player.atk); }
 document.getElementById("skillBtn").onclick=()=>{
-  createSkillAnimation();
+  skillAnimations.push({x:player.x*tileSize, y:player.y*tileSize, size:8, frame:0});
   dealDamage(player.skillAtk);
 }
 
-// 計算傷害
 function dealDamage(dmg){
   currentMonster.hp -= dmg;
   if(currentMonster.hp<=0){
@@ -169,26 +174,7 @@ function checkLevelUp(){
   }
 }
 
-//========================
-// 技能動畫
-//========================
-let skillAnimations=[];
-function createSkillAnimation(){
-  skillAnimations.push({x:player.x*tileSize, y:player.y*tileSize, size:8, frame:0});
-}
-function drawSkillAnimations(){
-  skillAnimations.forEach((s,i)=>{
-    s.y -= 2;
-    s.frame++;
-    ctx.fillStyle=`rgb(${255-s.frame*15},0,0)`;
-    ctx.fillRect(s.x + tileSize/2 - s.size/2, s.y, s.size, s.size);
-    if(s.frame>15) skillAnimations.splice(i,1);
-  });
-}
-
-//========================
 // 任務系統
-//========================
 function checkQuestProgress(){
   npcs.forEach(npc=>{
     if(npc.quest && currentMonster){
@@ -206,9 +192,7 @@ function checkQuestProgress(){
   });
 }
 
-//========================
 // NPC 對話
-//========================
 function interactNPC(){
   npcs.forEach(npc=>{
     if(Math.abs(player.x-npc.x)<=1 && Math.abs(player.y-npc.y)<=1){
@@ -225,24 +209,27 @@ document.getElementById("closeDialogBtn").onclick=()=>{
 // 移動與遇怪
 //========================
 document.addEventListener("keydown",(e)=>{
+  // 戰鬥或對話中不能移動
   if(document.getElementById("battleUI").style.display==="block") return;
   if(document.getElementById("dialogUI").style.display==="block") return;
-  if(e.key==="ArrowUp") player.y--;
-  if(e.key==="ArrowDown") player.y++;
-  if(e.key==="ArrowLeft") player.x--;
-  if(e.key==="ArrowRight") player.x++;
-  player.x=Math.max(0, Math.min(mapSize-1, player.x));
-  player.y=Math.max(0, Math.min(mapSize-1, player.y));
-  // 遇怪機率
-  if(Math.random()<0.1) startBattle(monsters[Math.floor(Math.random()*monsters.length)]);
-  // NPC 互動
+
+  let moved = false;
+  if(e.key==="ArrowUp"){ player.y--; moved=true; }
+  if(e.key==="ArrowDown"){ player.y++; moved=true; }
+  if(e.key==="ArrowLeft"){ player.x--; moved=true; }
+  if(e.key==="ArrowRight"){ player.x++; moved=true; }
+
+  // 限制地圖範圍
+  player.x = Math.max(0, Math.min(mapSize-1, player.x));
+  player.y = Math.max(0, Math.min(mapSize-1, player.y));
+
+  if(moved && Math.random()<0.1) startBattle(monsters[Math.floor(Math.random()*monsters.length)]);
   if(e.key===" ") interactNPC();
 });
 </script>
 
 </body>
 </html>
-
 
 
 
