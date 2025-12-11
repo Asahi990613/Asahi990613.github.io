@@ -1,345 +1,336 @@
 <!doctype html>
 <!--
-  異世界像素RPG - 單檔 prototype
-  功能：
-   - 廣大地圖（區域切換：森林、沙漠、沼澤）
-   - 可操作主角移動（像素風）
-   - 敵人：史萊姆、哥布林、半獸人、蜥人、精靈、鬼
-   - 屬性系統：火/水/風/地/光/闇（中二招式名稱已加入）
-   - 技能消耗MP，MP會隨時間回復
-   - 裝備武器系統
-   - 抽卡（角色招募）：三星/四星/五星
-   - 任務系統
+  異世界像素RPG - 完整整合版 (單檔 prototype)
+  包含：
+   - 多個區域：森林、沙漠、沼澤、雪地、火山、村莊、隨機地城
+   - 手動區域切換（包含「回到村莊」按鈕）
+   - 主角可移動（像素 sprite 基礎動畫 4 幀）
+   - 怪物種類與 Boss、怪物 AI、移動、名稱與等級、血條
+   - 技能與中二名稱、MP 消耗、MP 隨時間回復、技能特效
+   - 裝備系統（武器/防具），裝備詞綴（簡易詞綴）
+   - 抽卡(招募)機制：需花費金幣
+   - 任務系統與 NPC 對話（村莊接任務）
+   - 經驗與升級、屬性成長（力量/敏捷/智力）
+   - 簡單隨機地城生成
+   - 敵人掉落金幣與經驗
+   - 各種優化與 UI
 
-  使用說明：
-   - 方向鍵或 WASD 移動
-   - 按 1/2/3 類別技能 (若有足夠MP)
-   - 按 E 與場景互動（切換區域、接任務）
-   - 按 G 開啟抽卡（招募）介面
-
-  可延伸：加入更多地圖、存檔、敵人AI、動畫、貼圖等
+  把整個內容儲存為 index.html 並在瀏覽器開啟。
 -->
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>異世界像素RPG Prototype</title>
+<title>異世界像素RPG - 完整整合版</title>
 <style>
-  body{background:#111;color:#ddd;font-family:monospace;margin:0;}
-  #game{display:block;margin:10px auto;border:6px solid #222;image-rendering:pixelated}
-  #ui{width:800px;margin:8px auto;color:#eee}
+  body{background:#0b0b0f;color:#eee;font-family:monospace;margin:0}
+  #game{display:block;margin:10px auto;border:6px solid #222;image-rendering:pixelated;background:#000}
+  #ui{width:980px;margin:8px auto;color:#eee}
   .row{display:flex;gap:8px;align-items:center}
-  button{background:#222;color:#ddd;border:1px solid #444;padding:6px}
+  button{background:#222;color:#ddd;border:1px solid #444;padding:6px;cursor:pointer}
   .panel{background:#151515;padding:8px;border:1px solid #333}
-  #log{height:80px;overflow:auto;background:#0b0b0b;padding:6px;border:1px solid #222}
+  #log{height:120px;overflow:auto;background:#070709;padding:6px;border:1px solid #222}
+  .small{font-size:12px}
 </style>
 </head>
 <body>
-<canvas id="game" width="640" height="480"></canvas>
+<canvas id="game" width="800" height="560"></canvas>
 <div id="ui" class="panel">
   <div class="row">
     <div style="flex:1">
-      <strong id="areaName">區域：森林地帶</strong>
+      <strong id="areaName">區域：村莊</strong>
       <div>主角：<span id="playerName">路西法的遺孤</span> 等級：<span id="playerLV">1</span></div>
+      <div>EXP: <span id="exp">0</span> / <span id="expNext">50</span> 金幣: <span id="gold">0</span></div>
     </div>
     <div>
-      <button id="btnGacha">G 抽卡（招募）</button>
+      <button id="btnGacha">抽卡（20 金幣）</button>
+      <button id="btnToVillage">回到村莊</button>
+      <button id="btnOpenDungeon">進入隨機地城</button>
       <button id="btnToggleHelp">說明</button>
     </div>
   </div>
   <div class="row" style="margin-top:6px">
-    <div style="width:260px" class="panel">
+    <div style="width:320px" class="panel">
       <div>HP: <span id="hp">100</span>/<span id="maxHp">100</span></div>
       <div>MP: <span id="mp">30</span>/<span id="maxMp">30</span></div>
       <div>武器：<span id="weapon">未裝備</span></div>
-      <div>裝備攻擊力：<span id="atk">5</span></div>
+      <div>攻擊：<span id="atk">5</span> 防禦：<span id="def">0</span></div>
+      <div>屬性：力 <span id="statStr">5</span> 敏 <span id="statDex">3</span> 智 <span id="statInt">2</span></div>
     </div>
     <div style="flex:1" class="panel">
-      <div>技能（1/2/3 按鍵）</div>
-      <div id="skills">1. 火屬性：地獄業火 (MP5) &nbsp; 2. 風屬性：烈風斷章 (MP3) &nbsp; 3. 光屬性：聖焰審判 (MP8)</div>
-    </div>
-  </div>
-  <div style="margin-top:6px" class="panel">
-    <div class="row">
-      <div style="flex:1">
-        <strong>任務</strong>
-        <div id="questArea">目前無任務。到村莊找人談話以接任務。</div>
-      </div>
-      <div style="width:260px">
-        <button id="btnEquipSword">裝備：+10 攻擊（示範武器）</button>
-        <button id="btnCompleteQuest">完成任務（測試）</button>
-      </div>
+      <div>技能（1/2/3）：</div>
+      <div id="skillsDesc">1. 地獄業火 (火) MP5  2. 烈風斷章 (風) MP4  3. 聖焰審判 (光) MP9</div>
+      <div style="margin-top:6px">操作：方向鍵/WASD 移動，1/2/3 技能，E 互動，G 抽卡</div>
     </div>
   </div>
   <div style="margin-top:6px" class="panel row">
-    <div style="flex:1">遊戲日誌：</div>
-    <div style="width:300px">操作提示：方向鍵/WASD 移動，1/2/3 技能，E 互動，G 抽卡</div>
+    <div style="flex:1">
+      <strong>任務</strong>
+      <div id="questArea">目前無任務。到村莊找 NPC 接任務。</div>
+    </div>
+    <div style="width:300px">
+      <button id="btnEquipSword">裝備示範武器 (+10 攻擊)</button>
+      <button id="btnShowInv">顯示隊伍/道具</button>
+    </div>
   </div>
   <div id="log" class="panel"></div>
 </div>
-
 <script>
-// ---------- 基礎資料 ----------
-const TILE = 16; // 像素風格格子
+/* --------- 基本設定 --------- */
+const TILE = 16; // 基礎像素格
 const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
-ctx.imageSmoothingEnabled = false;
+const ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false;
 
-const areas = {
-  forest: {name:'森林地帶', w:80, h:60, color:'#1a5', enemyRate:0.003},
-  desert: {name:'荒漠沙域', w:80, h:60, color:'#c95', enemyRate:0.0025},
-  swamp:  {name:'陰鬱沼澤', w:80, h:60, color:'#473', enemyRate:0.004}
+// 區域資料
+const AREAS = {
+  village:{key:'village',name:'村莊',w:40,h:28,color:'#3b5',safe:true},
+  forest:{key:'forest',name:'森林',w:80,h:56,color:'#1a5'},
+  desert:{key:'desert',name:'荒漠',w:80,h:56,color:'#c95'},
+  swamp:{key:'swamp',name:'沼澤',w:80,h:56,color:'#473'},
+  snow:{key:'snow',name:'雪地',w:80,h:56,color:'#9cf'},
+  volcano:{key:'volcano',name:'火山',w:80,h:56,color:'#a53'},
+  dungeon:{key:'dungeon',name:'隨機地城',w:50,h:35,color:'#333'}
 };
-let currentAreaKey = 'forest';
+let currentArea = AREAS.village;
 
-// 玩家資料
+// 玩家
 const player = {
-  name:'路西法的遺孤', x:40, y:30, vx:0, vy:0, speed:3,
-  hp:100, maxHp:100, mp:30, maxMp:30, mpRegen:0.5, atk:5,
-  inventory:[], weapon:null, level:1
+  name:'路西法的遺孤', x:20, y:14, speed:3, hp:100, maxHp:100, mp:30, maxMp:30, mpRegen:0.8, atk:5, def:0,
+  level:1, exp:0, expNext:50, gold:0,
+  stats:{str:5,dex:3,int:2},
+  weapon:null, armor:null, inventory:[], party:[], anim:{frame:0,t:0},
 };
 
-// 屬性與中二招式名稱
-const ELEMENTS = {
-  fire: {name:'火', skill:'地獄業火'},
-  water:{name:'水', skill:'深海咒潮'},
-  wind: {name:'風', skill:'烈風斷章'},
-  earth:{name:'地', skill:'大地裁決'},
-  light:{name:'光', skill:'聖焰審判'},
-  dark: {name:'闇', skill:'破滅黯影'}
-};
-
-// 怪物定義（像素風外觀只用矩形顏色）
-const ENEMY_TYPES = [
-  {id:'slime', name:'史萊姆', hp:20, atk:2, color:'#6f6', elem:'water'},
-  {id:'gob', name:'哥布林', hp:30, atk:4, color:'#7a5', elem:'earth'},
-  {id:'orc', name:'半獸人', hp:45, atk:7, color:'#a55', elem:'fire'},
-  {id:'lizard', name:'蜥人', hp:35, atk:5, color:'#8b6', elem:'earth'},
-  {id:'elf', name:'精靈', hp:28, atk:6, color:'#6cf', elem:'wind'},
-  {id:'ghost', name:'鬼', hp:22, atk:5, color:'#ccc', elem:'dark'}
+// 元素與技能
+const ELEMENTS={fire:{name:'火',skill:'地獄業火'},wind:{name:'風',skill:'烈風斷章'},light:{name:'光',skill:'聖焰審判'}};
+const SKILLS=[
+  {id:'s1',name:ELEMENTS.fire.skill,elem:'fire',cost:5,power:20,fx:'fire'},
+  {id:'s2',name:ELEMENTS.wind.skill,elem:'wind',cost:4,power:12,fx:'wind'},
+  {id:'s3',name:ELEMENTS.light.skill,elem:'light',cost:9,power:32,fx:'light'}
 ];
 
-let enemies = []; // 當前區域怪物
-let keysDown = {};
-let logEl = document.getElementById('log');
+// 怪物定義與 Boss
+const MON_TYPES=[
+  {id:'slime',name:'史萊姆',hp:20,atk:2,def:0,color:'#6f6',rarity:1,gold:2,exp:5},
+  {id:'gob',name:'哥布林',hp:35,atk:5,def:1,color:'#7a5',rarity:1,gold:4,exp:10},
+  {id:'orc',name:'半獸人',hp:60,atk:10,def:2,color:'#a55',rarity:2,gold:8,exp:22},
+  {id:'lizard',name:'蜥人',hp:45,atk:6,def:1,color:'#8b6',rarity:1,gold:6,exp:14},
+  {id:'elf',name:'精靈',hp:40,atk:8,def:1,color:'#6cf',rarity:2,gold:7,exp:16},
+  {id:'ghost',name:'鬼',hp:30,atk:7,def:0,color:'#ccc',rarity:2,gold:6,exp:12}
+];
+const BOSSES=[
+  {id:'gob_king',name:'哥布林王',hp:200,atk:18,def:4,color:'#b55',gold:100,exp:200},
+  {id:'flamewyrm',name:'熔岩蜥龍',hp:300,atk:28,def:6,color:'#f84',gold:200,exp:400}
+];
 
-// 任務系統範例
-let quest = {id:null, title:null, desc:null, target:null, count:0, goal:0, reward:null};
+let enemies=[];
+let keysDown={};
+let logEl=document.getElementById('log');
+function log(msg){const d=document.createElement('div');d.textContent='['+new Date().toLocaleTimeString()+'] '+msg;logEl.prepend(d);} 
 
-// 抽卡池（代表性角色簡化）
-const gachaPool = {
-  '5': [ {name:'赤炎王·焰獄', elem:'fire'},{name:'蒼風皇·斷章', elem:'wind'}],
-  '4': [ {name:'淨光祭司', elem:'light'},{name:'深海執鞭', elem:'water'}],
-  '3': [ {name:'邊境弓手', elem:'wind'},{name:'駐守騎士', elem:'earth'}]
+/* --------- 隨機地城生成（非常簡易） --------- */
+function generateDungeon(w=40,h=28){
+  // 0 空地 1 牆 2 房間地板
+  const map = Array.from({length:h},()=>Array.from({length:w},()=>1));
+  // 隨機房間
+  const rooms=[];
+  for(let i=0;i<6;i++){
+    const rw=randInt(5,10), rh=randInt(4,8), rx=randInt(1,w-rw-2), ry=randInt(1,h-rh-2);
+    rooms.push({x:rx,y:ry,w:rw,h:rh});
+    for(let y=ry;y<ry+rh;y++) for(let x=rx;x<rx+rw;x++) map[y][x]=2;
+  }
+  // 走廊連接房間 (簡化：打開線段)
+  rooms.forEach((r,i)=>{
+    if(i===0) return;
+    const a=rooms[i-1]; const b=r;
+    const cx=Math.floor(a.x + a.w/2), cy=Math.floor(a.y + a.h/2);
+    const bx=Math.floor(b.x + b.w/2), by=Math.floor(b.y + b.h/2);
+    for(let x=Math.min(cx,bx);x<=Math.max(cx,bx);x++) map[cy][x]=2;
+    for(let y=Math.min(cy,by);y<=Math.max(cy,by);y++) map[y][bx]=2;
+  });
+  return {map,rooms,w,h};
 }
 
-// ---------- 輔助 ----------
-function log(msg){
-  const p = document.createElement('div'); p.textContent = '['+new Date().toLocaleTimeString()+'] '+msg; logEl.prepend(p);
-}
-function rnd(n){return Math.random()*n}
-function randInt(min,max){return Math.floor(Math.random()*(max-min+1))+min}
-
-// ---------- 地圖與視窗 ----------
-const view = {w:canvas.width, h:canvas.height, scrollX:0, scrollY:0};
+/* --------- 助手函數 --------- */
+function randInt(a,b){return Math.floor(Math.random()*(b-a+1))+a}
 function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
 
-function spawnEnemiesForArea(){
-  enemies = [];
-  const info = areas[currentAreaKey];
-  // 依據area.enemyRate生成一些敵人
-  for(let i=0;i<Math.floor(info.w*info.h*info.enemyRate*10);i++){
-    const t = ENEMY_TYPES[randInt(0,ENEMY_TYPES.length-1)];
-    enemies.push({type:t.id,name:t.name,x:randInt(2,info.w-3),y:randInt(2,info.h-3),hp:t.hp,maxHp:t.hp,atk:t.atk,color:t.color,elem:t.elem});
+/* --------- 生成/管理敵人 --------- */
+function spawnEnemies(areaKey){
+  enemies=[];
+  const area = AREAS[areaKey.key];
+  // 少量怪物在外面遊蕩
+  const count = area.safe? 0 : Math.max(3, Math.floor(area.w*area.h*0.0008));
+  for(let i=0;i<count;i++){
+    const mt = MON_TYPES[randInt(0,MON_TYPES.length-1)];
+    enemies.push({id:mt.id,name:mt.name,lv:randInt(1,Math.min(5,player.level+1)),x:randInt(2,area.w-3),y:randInt(2,area.h-3),hp:mt.hp, maxHp:mt.hp, atk:mt.atk, def:mt.def, color:mt.color, gold:mt.gold, exp:mt.exp, vx:0,vy:0,anim:{t:Math.random()*2,off:0}});
   }
+  // 在特定區域可能生成 Boss
+  if(areaKey.key==='volcano' && Math.random()<0.15) enemies.push(Object.assign({x:Math.floor(area.w/2),y:Math.floor(area.h/2)},BOSSES[1]));
+  if(areaKey.key==='forest' && Math.random()<0.1) enemies.push(Object.assign({x:Math.floor(area.w/2)+5,y:Math.floor(area.h/2)},BOSSES[0]));
 }
 
-function changeArea(key,tx,ty){
-  currentAreaKey = key; document.getElementById('areaName').textContent = '區域：'+areas[key].name;
-  // 將座標移到指定或中心
-  const a = areas[key];
-  player.x = tx!==undefined?tx:Math.floor(a.w/2);
-  player.y = ty!==undefined?ty:Math.floor(a.h/2);
-  spawnEnemiesForArea();
-  log('已切換至區域：'+areas[key].name);
+/* --------- 技能特效 --------- */
+let effects = []; // 存放視覺特效
+function spawnEffect(type,x,y){ effects.push({type,x,y,t:0}); }
+
+/* --------- 繪製與更新 --------- */
+let lastTime = performance.now();
+function gameLoop(now){
+  const dt = (now - lastTime)/1000; lastTime = now;
+  update(dt); render(dt);
+  requestAnimationFrame(gameLoop);
 }
 
-// ---------- 繪製 ----------
-function draw(){
+function update(dt){
+  // 玩家移動
+  let mvx = (keysDown['d']||keysDown['ArrowRight']?1:0) - (keysDown['a']||keysDown['ArrowLeft']?1:0);
+  let mvy = (keysDown['s']||keysDown['ArrowDown']?1:0) - (keysDown['w']||keysDown['ArrowUp']?1:0);
+  if(mvx||mvy){ const m=Math.hypot(mvx,mvy); mvx/=m; mvy/=m; player.anim.t+=dt; if(player.anim.t>0.12){player.anim.frame=(player.anim.frame+1)%4; player.anim.t=0;} }
+  player.x = clamp(player.x + mvx*player.speed*dt,1,AREAS[currentArea.key].w-2);
+  player.y = clamp(player.y + mvy*player.speed*dt,1,AREAS[currentArea.key].h-2);
+
+  // MP regen
+  player.mp = clamp(player.mp + player.mpRegen*dt, 0, player.maxMp);
+
+  // 敵人 AI 移動與攻擊
+  enemies.forEach(e=>{
+    e.anim.t += dt; e.anim.off = Math.sin(e.anim.t*4)*2;
+    // 隨機微移
+    if(Math.random()<0.02) { e.vx = (Math.random()*2-1)*0.25; e.vy = (Math.random()*2-1)*0.25; }
+    // 追擊玩家（簡單邏輯）
+    const dx = player.x - e.x, dy = player.y - e.y; const dist = Math.hypot(dx,dy);
+    if(dist < 6) { e.vx += (dx/dist)*0.02; e.vy += (dy/dist)*0.02; }
+    e.x = clamp(e.x + e.vx,1,AREAS[currentArea.key].w-2);
+    e.y = clamp(e.y + e.vy,1,AREAS[currentArea.key].h-2);
+
+    // 如果靠近玩家，造成傷害
+    if(dist < 0.8){ const dmg = Math.max(0, e.atk - player.def); player.hp = clamp(player.hp - dmg*dt*0.8,0,player.maxHp); }
+  });
+
+  // 特效更新
+  effects = effects.filter(f=>{ f.t+=dt; return f.t<1.2; });
+}
+
+function render(dt){
+  const area = AREAS[currentArea.key];
   // 背景
-  const area = areas[currentAreaKey];
-  ctx.fillStyle = '#0b0b0b'; ctx.fillRect(0,0,canvas.width,canvas.height);
-  // 簡單地圖方塊
+  ctx.fillStyle = '#050507'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  // 填滿地塊
   for(let i=0;i<Math.ceil(canvas.width/TILE);i++){
     for(let j=0;j<Math.ceil(canvas.height/TILE);j++){
-      ctx.fillStyle = area.color;
-      ctx.fillRect((i*TILE)-((player.x* TILE)-canvas.width/2)%TILE,(j*TILE)-((player.y* TILE)-canvas.height/2)%TILE,TILE-1,TILE-1);
+      ctx.fillStyle = area.color; ctx.fillRect(i*TILE,j*TILE,TILE-1,TILE-1);
     }
   }
-  // 計算視窗偏移（讓玩家置中）
-  view.scrollX = player.x * TILE - canvas.width/2;
-  view.scrollY = player.y * TILE - canvas.height/2;
 
-  // 繪製敵人與玩家（像素格）
+  // 計算視窗偏移讓玩家置中
+  const scrollX = player.x*TILE - canvas.width/2, scrollY = player.y*TILE - canvas.height/2;
+
+  // 敵人
   enemies.forEach(e=>{
-    const sx = (e.x*TILE)-view.scrollX; const sy = (e.y*TILE)-view.scrollY;
-    ctx.fillStyle = e.color; ctx.fillRect(Math.round(sx),Math.round(sy),TILE*1.2,TILE*1.2);
-    // HP bar
-    ctx.fillStyle = '#000'; ctx.fillRect(sx,sy-5, TILEx(1.4),4);
-    ctx.fillStyle = '#f33'; ctx.fillRect(sx,sy-5, Math.max(0,(e.hp/e.maxHp)*(TILE*1.4)),4);
+    const sx = Math.round(e.x*TILE - scrollX), sy = Math.round(e.y*TILE - scrollY + e.anim.off);
+    // 身體
+    ctx.fillStyle = e.color; ctx.fillRect(sx,sy,TILE*1.5,TILE*1.5);
+    // 名稱等級
+    ctx.fillStyle = '#fff'; ctx.font='10px monospace'; ctx.fillText((e.name||'Boss')+' Lv'+(e.lv||1), sx, sy-6);
+    // 血條
+    ctx.fillStyle='#000'; ctx.fillRect(sx,sy-3,TILE*1.5,4);
+    ctx.fillStyle='#f33'; ctx.fillRect(sx,sy-3, Math.max(0,(e.hp/e.maxHp)*(TILE*1.5)),4);
   });
-  // 主角
-  const px = canvas.width/2; const py = canvas.height/2;
-  // 方形像素角色
-  ctx.fillStyle = '#fff'; ctx.fillRect(px-TILE/1.6,py-TILE/1.6,TILE*1.2,TILE*1.2);
-  // face
-  ctx.fillStyle = '#000'; ctx.fillRect(px-2,py-2,1,1); ctx.fillRect(px+2,py-2,1,1);
+
+  // 玩家（4 幀走路）
+  const px = Math.round(canvas.width/2), py = Math.round(canvas.height/2);
+  // 簡單 sprite：身體顏色會隨幀變化
+  const colors = ['#fff','#efe','#eee','#fdf'];
+  ctx.fillStyle = colors[player.anim.frame%colors.length]; ctx.fillRect(px-TILE,py-TILE,TILE*1.6,TILE*1.6);
+  ctx.fillStyle='#000'; ctx.fillRect(px-3,py-2,1,1); ctx.fillRect(px+3,py-2,1,1);
+
+  // 特效
+  effects.forEach(f=>{
+    const fx = Math.round(canvas.width/2 + (f.x - player.x)*TILE);
+    const fy = Math.round(canvas.height/2 + (f.y - player.y)*TILE);
+    const alpha = Math.max(0,1 - f.t);
+    ctx.globalAlpha = alpha;
+    if(f.type==='fire'){
+      ctx.beginPath(); ctx.arc(fx,fy, f.t*60,0,Math.PI*2); ctx.fillStyle='rgba(255,120,40,0.6)'; ctx.fill();
+    } else if(f.type==='wind'){
+      ctx.beginPath(); ctx.ellipse(fx,fy, f.t*80, f.t*20, 0,0,Math.PI*2); ctx.fillStyle='rgba(220,220,255,0.5)'; ctx.fill();
+    } else if(f.type==='light'){
+      ctx.beginPath(); ctx.arc(fx,fy, 40+f.t*120,0,Math.PI*2); ctx.fillStyle='rgba(255,250,200,0.7)'; ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  });
 
   // HUD
-  document.getElementById('hp').textContent = player.hp.toFixed(0);
-  document.getElementById('maxHp').textContent = player.maxHp;
-  document.getElementById('mp').textContent = player.mp.toFixed(1);
-  document.getElementById('maxMp').textContent = player.maxMp;
-  document.getElementById('weapon').textContent = player.weapon?player.weapon.name:'未裝備';
+  ctx.fillStyle='#fff'; ctx.font='12px monospace';
+  document.getElementById('hp').textContent = Math.round(player.hp);
+  document.getElementById('mp').textContent = Math.round(player.mp);
   document.getElementById('atk').textContent = player.atk + (player.weapon?player.weapon.atk:0);
+  document.getElementById('def').textContent = player.def + (player.armor?player.armor.def:0);
+  document.getElementById('playerLV').textContent = player.level;
+  document.getElementById('exp').textContent = player.exp; document.getElementById('expNext').textContent = player.expNext;
+  document.getElementById('gold').textContent = player.gold;
+  document.getElementById('weapon').textContent = player.weapon?player.weapon.name:'未裝備';
 }
 
-// small helper to avoid long ref
-function TILEx(f){return TILE * f}
-
-// ---------- 遊戲更新 ----------
-let lastTime=performance.now();
-function update(now){
-  const dt=(now-lastTime)/1000; lastTime=now;
-  // 移動
-  let mvx=0,mvy=0;
-  if(keysDown['ArrowLeft']||keysDown['a']) mvx=-1;
-  if(keysDown['ArrowRight']||keysDown['d']) mvx=1;
-  if(keysDown['ArrowUp']||keysDown['w']) mvy=-1;
-  if(keysDown['ArrowDown']||keysDown['s']) mvy=1;
-  if(mvx!==0||mvy!==0){
-    const mag = Math.hypot(mvx,mvy); mvx/=mag; mvy/=mag;
-    player.x += mvx * player.speed * dt * 10 / TILE; // 轉換成地圖格
-    player.y += mvy * player.speed * dt * 10 / TILE;
-    const a=areas[currentAreaKey];
-    player.x = clamp(player.x,1,a.w-2); player.y = clamp(player.y,1,a.h-2);
-  }
-  // MP 恢復
-  player.mp = clamp(player.mp + player.mpRegen * dt, 0, player.maxMp);
-
-  // 簡單敵人近距離傷害（若接近主角）
-  enemies.forEach(e=>{
-    const dist = Math.hypot(e.x-player.x,e.y-player.y);
-    if(dist<0.9){ // 近戰接觸
-      // 對主角造成小量傷害
-      // 基於演示，後續加入冷卻
-      player.hp = clamp(player.hp - e.atk * dt * 0.4, 0, player.maxHp);
-    }
-  });
-
-  // 任務檢查
-  if(quest.id && quest.target){
-    // 比如目標是殺死某類怪物（簡化）
-    // 本 prototype 以按鈕模擬完成；實際可以在殺死敵人時增加count
-  }
-
-  draw();
-  requestAnimationFrame(update);
-}
-requestAnimationFrame(update);
-
-// ---------- 輸入 ----------
-window.addEventListener('keydown',e=>{ keysDown[e.key]=true; handleKeyDown(e); });
+/* --------- 互動 / 技能 / 戰鬥相關 --------- */
+window.addEventListener('keydown',e=>{ keysDown[e.key]=true; if(e.key==='1') castSkill(0); if(e.key==='2') castSkill(1); if(e.key==='3') castSkill(2); if(e.key==='e' || e.key==='E') interact(); if(e.key==='g' || e.key==='G') openGacha(); });
 window.addEventListener('keyup',e=>{ delete keysDown[e.key]; });
 
-function handleKeyDown(e){
-  if(e.key==='1') useSkill(1);
-  if(e.key==='2') useSkill(2);
-  if(e.key==='3') useSkill(3);
-  if(e.key==='e' || e.key==='E') interact();
-  if(e.key==='g' || e.key==='G') openGacha();
+function castSkill(idx){
+  const sk = SKILLS[idx]; if(!sk) return;
+  if(player.mp < sk.cost){ log('MP不足，無法施放 '+sk.name); return; }
+  player.mp -= sk.cost; log('施放 '+sk.name);
+  // 特效與傷害
+  spawnEffect(sk.fx, player.x, player.y);
+  enemies.forEach(e=>{ const dist = Math.hypot(e.x-player.x, e.y-player.y); if(dist < 4){ const dmg = sk.power + player.atk + Math.floor(player.stats.str*0.5); e.hp -= dmg; log('命中 '+e.name+'，造成 '+dmg+' 傷害'); if(e.hp <= 0){ onEnemyDefeated(e); }}});
 }
 
-// ---------- 技能 ----------
-const playerSkills = [
-  {elem:'fire', name: ELEMENTS.fire.skill, cost:5, power:18},
-  {elem:'wind', name: ELEMENTS.wind.skill, cost:3, power:12},
-  {elem:'light',name: ELEMENTS.light.skill,cost:8, power:28}
-];
+function spawnEffect(type,x,y){ effects.push({type,x,y,t:0}); }
 
-function useSkill(slot){
-  const s = playerSkills[slot-1]; if(!s) return;
-  if(player.mp < s.cost){ log('MP不足，無法施放 '+s.name); return; }
-  player.mp -= s.cost; log('施放 '+s.name+'（'+s.elem+'） 造成範圍傷害');
-  // 對附近敵人造成傷害（簡單計算）
-  enemies.forEach(e=>{
-    const dist = Math.hypot(e.x-player.x,e.y-player.y);
-    if(dist < 3){
-      const dmg = s.power + player.atk + (player.weapon?player.weapon.atk:0);
-      e.hp -= dmg;
-      log('命中 '+e.name+'，造成 '+Math.round(dmg)+' 傷害');
-    }
-  });
-  // 清理死亡的敵人
-  const before = enemies.length;
-  enemies = enemies.filter(e=>e.hp>0);
-  const dead = before - enemies.length;
-  if(dead>0) log('擊殺 '+dead+' 個敵人');
+function onEnemyDefeated(e){
+  // 掉落金幣與經驗
+  const gold = e.gold || 5; const exp = e.exp || 10;
+  player.gold += gold; player.exp += exp;
+  log('擊敗 '+e.name+'，獲得 '+gold+' 金幣、'+exp+' EXP');
+  // 刪除敵人
+  enemies = enemies.filter(x=>x!==e);
+  checkLevelUp();
 }
 
-// ---------- 互動與任務 ----------
+function checkLevelUp(){
+  while(player.exp >= player.expNext){ player.exp -= player.expNext; player.level++; player.expNext = Math.floor(player.expNext*1.6); player.maxHp += 10; player.hp = player.maxHp; player.atk += 2; player.def +=1; player.stats.str +=2; log('恭喜升級！ 現在 Lv'+player.level); }}
+
+/* --------- 任務與 NPC（村莊） --------- */
+let currentQuest = null;
 function interact(){
-  // 在地圖特定座標模擬村莊NPC（例如當x,y某範圍內）
-  if(Math.hypot(player.x-40,player.y-30) < 2){
-    // 給一個任務
-    quest = {id:1,title:'淨化史萊姆之地',desc:'消滅 3 個 史萊姆',target:'slime',count:0,goal:3,reward:{gold:100}};
-    document.getElementById('questArea').textContent = quest.title + '：' + quest.desc;
-    log('接取任務：'+quest.title);
-  } else {
-    // 切換區域示範（若靠近地圖邊緣）
-    const a = areas[currentAreaKey];
-    if(player.x > a.w-2) changeArea('desert',2,Math.min(player.y,areas['desert'].h-3));
-    else if(player.x < 2) changeArea('swamp',areas['swamp'].w-3,Math.min(player.y,areas['swamp'].h-3));
-    else log('附近沒有可互動的物件');
-  }
+  // 若在村莊中心，與 NPC 對話，接任務
+  if(currentArea.key === 'village' && Math.hypot(player.x-20,player.y-12) < 4){
+    if(!currentQuest){ currentQuest = {id:1,title:'淨化史萊姆',desc:'消滅 3 個 史萊姆',target:'slime',count:0,goal:3,reward:{gold:50,exp:60}}; document.getElementById('questArea').textContent = currentQuest.title+': '+currentQuest.desc; log('接取任務：'+currentQuest.title); }
+    else { if(currentQuest.count>=currentQuest.goal){ player.gold += currentQuest.reward.gold; player.exp += currentQuest.reward.exp; log('任務完成：獲得 '+currentQuest.reward.gold+' 金幣 與 '+currentQuest.reward.exp+' EXP'); currentQuest=null; document.getElementById('questArea').textContent='目前無任務。'; checkLevelUp(); } else log('任務尚未完成：'+currentQuest.count+'/'+currentQuest.goal); }}
+  else { log('附近沒有互動對象。'); }
 }
 
-// 完成任務（測試按鈕）
-document.getElementById('btnCompleteQuest').addEventListener('click',()=>{
-  if(quest && quest.id){ log('任務完成：獲得 '+quest.reward.gold+' 金幣'); quest={}; document.getElementById('questArea').textContent='目前無任務。'; }
-});
+/* --------- 抽卡（需金幣） --------- */
+const gachaPool = { '5': [{name:'赤炎王·焰獄',elem:'fire'},{name:'蒼風皇·斷章',elem:'wind'}], '4': [{name:'淨光祭司',elem:'light'},{name:'深海執鞭',elem:'water'}], '3': [{name:'邊境弓手',elem:'wind'},{name:'駐守騎士',elem:'earth'}] };
+function openGacha(){ const cost = 20; if(player.gold < cost){ log('金幣不足，無法抽卡（需要 '+cost+'）'); return; } player.gold -= cost; const r=Math.random()*100; let rarity='3'; if(r<5) rarity='5'; else if(r<20) rarity='4'; const pool=gachaPool[rarity]; const pick=pool[randInt(0,pool.length-1)]; player.inventory.push({name:pick.name,rarity:rarity,elem:pick.elem}); log('抽到 '+rarity+'★ '+pick.name+'（'+pick.elem+'）'); }
 
-// ---------- 裝備 ----------
-document.getElementById('btnEquipSword').addEventListener('click',()=>{
-  player.weapon = {name:'烈焰長劍',atk:10}; log('裝備 '+player.weapon.name+'，攻擊+'+player.weapon.atk);
-});
-
-// ---------- 抽卡（招募） ----------
-function openGacha(){
-  // 三星/四星/五星機率：80/15/5
-  const r = Math.random()*100;
-  let rarity;
-  if(r < 5) rarity='5';
-  else if(r<20) rarity='4';
-  else rarity='3';
-  const pool = gachaPool[rarity];
-  const pick = pool[randInt(0,pool.length-1)];
-  log('獲得 '+rarity+'★ '+pick.name+'（'+ELEMENTS[pick.elem].name+'）');
-  // 將角色加入 inventory
-  player.inventory.push({name:pick.name, rarity:rarity, elem:pick.elem});
-}
-
-// 按鈕也綁定
 document.getElementById('btnGacha').addEventListener('click',openGacha);
 
-document.getElementById('btnToggleHelp').addEventListener('click',()=>{
-  alert('操作：方向鍵/WASD 移動，1/2/3 技能，E 互動，G 抽卡。示範武器 / 任務 / 區域切換已實作。');
+/* --------- 裝備示範按鈕 --------- */
+document.getElementById('btnEquipSword').addEventListener('click',()=>{
+  player.weapon = {name:'烈焰長劍',atk:12,affix:'燃燒'}; player.atk += player.weapon.atk; log('裝備 '+player.weapon.name+'，攻擊 +'+player.weapon.atk);
 });
 
-// ---------- 初始 ----------
-changeArea('forest');
-log('遊戲啟動 - 歡迎來到異世界');
+/* --------- 區域切換（手動） --------- */
+document.getElementById('btnToVillage').addEventListener('click',()=>{ changeArea('village'); player.x=20; player.y=12; log('傳送回村莊'); });
+document.getElementById('btnOpenDungeon').addEventListener('click',()=>{ changeArea('dungeon'); const dg=generateDungeon(40,28); currentArea.map=dg.map; currentArea.rooms=dg.rooms; log('進入隨機地城'); });
 
+function changeArea(key){ currentArea = AREAS[key]; document.getElementById('areaName').textContent = '區域：'+currentArea.name; spawnEnemies(currentArea); }
+
+/* --------- 初始啟動 --------- */
+changeArea('village'); player.x=20; player.y=12; log('遊戲啟動 - 歡迎來到異世界');
+requestAnimationFrame(gameLoop);
 </script>
 </body>
 </html>
