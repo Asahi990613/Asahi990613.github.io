@@ -1,244 +1,345 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
+<!doctype html>
+<!--
+  異世界像素RPG - 單檔 prototype
+  功能：
+   - 廣大地圖（區域切換：森林、沙漠、沼澤）
+   - 可操作主角移動（像素風）
+   - 敵人：史萊姆、哥布林、半獸人、蜥人、精靈、鬼
+   - 屬性系統：火/水/風/地/光/闇（中二招式名稱已加入）
+   - 技能消耗MP，MP會隨時間回復
+   - 裝備武器系統
+   - 抽卡（角色招募）：三星/四星/五星
+   - 任務系統
+
+  使用說明：
+   - 方向鍵或 WASD 移動
+   - 按 1/2/3 類別技能 (若有足夠MP)
+   - 按 E 與場景互動（切換區域、接任務）
+   - 按 G 開啟抽卡（招募）介面
+
+  可延伸：加入更多地圖、存檔、敵人AI、動畫、貼圖等
+-->
+<html lang="zh-Hant">
 <head>
-<meta charset="UTF-8">
-<title>2D 像素 RPG 屬性版</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>異世界像素RPG Prototype</title>
 <style>
-body { background:#111; display:flex; justify-content:center; }
-canvas { image-rendering: pixelated; margin-top:20px; }
-#battleUI, #dialogUI { position:absolute; top:50px; left:50%; transform:translateX(-50%);
-  width:300px; padding:15px; background:#222; color:white; border:2px solid white;
-  display:none;
-}
-button { margin-top:10px; width:100%; padding:10px; }
-#playerStats { position:absolute; top:10px; left:10px; color:white; }
-#expBar { position:absolute; top:35px; left:10px; width:200px; height:10px; background:#444; }
-#expBarFill { width:0%; height:100%; background:#ff0; }
+  body{background:#111;color:#ddd;font-family:monospace;margin:0;}
+  #game{display:block;margin:10px auto;border:6px solid #222;image-rendering:pixelated}
+  #ui{width:800px;margin:8px auto;color:#eee}
+  .row{display:flex;gap:8px;align-items:center}
+  button{background:#222;color:#ddd;border:1px solid #444;padding:6px}
+  .panel{background:#151515;padding:8px;border:1px solid #333}
+  #log{height:80px;overflow:auto;background:#0b0b0b;padding:6px;border:1px solid #222}
 </style>
 </head>
 <body>
-
-<canvas id="game" width="640" height="640"></canvas>
-<div id="playerStats"></div>
-<div id="expBar"><div id="expBarFill"></div></div>
-
-<div id="battleUI">
-  <h3 id="monsterName"></h3>
-  <p id="monsterHP"></p>
-  <button id="attackBtn">普通攻擊</button>
-  <button id="skillBtn">技能攻擊</button>
-</div>
-
-<div id="dialogUI">
-  <p id="dialogText"></p>
-  <button id="closeDialogBtn">關閉</button>
+<canvas id="game" width="640" height="480"></canvas>
+<div id="ui" class="panel">
+  <div class="row">
+    <div style="flex:1">
+      <strong id="areaName">區域：森林地帶</strong>
+      <div>主角：<span id="playerName">路西法的遺孤</span> 等級：<span id="playerLV">1</span></div>
+    </div>
+    <div>
+      <button id="btnGacha">G 抽卡（招募）</button>
+      <button id="btnToggleHelp">說明</button>
+    </div>
+  </div>
+  <div class="row" style="margin-top:6px">
+    <div style="width:260px" class="panel">
+      <div>HP: <span id="hp">100</span>/<span id="maxHp">100</span></div>
+      <div>MP: <span id="mp">30</span>/<span id="maxMp">30</span></div>
+      <div>武器：<span id="weapon">未裝備</span></div>
+      <div>裝備攻擊力：<span id="atk">5</span></div>
+    </div>
+    <div style="flex:1" class="panel">
+      <div>技能（1/2/3 按鍵）</div>
+      <div id="skills">1. 火屬性：地獄業火 (MP5) &nbsp; 2. 風屬性：烈風斷章 (MP3) &nbsp; 3. 光屬性：聖焰審判 (MP8)</div>
+    </div>
+  </div>
+  <div style="margin-top:6px" class="panel">
+    <div class="row">
+      <div style="flex:1">
+        <strong>任務</strong>
+        <div id="questArea">目前無任務。到村莊找人談話以接任務。</div>
+      </div>
+      <div style="width:260px">
+        <button id="btnEquipSword">裝備：+10 攻擊（示範武器）</button>
+        <button id="btnCompleteQuest">完成任務（測試）</button>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:6px" class="panel row">
+    <div style="flex:1">遊戲日誌：</div>
+    <div style="width:300px">操作提示：方向鍵/WASD 移動，1/2/3 技能，E 互動，G 抽卡</div>
+  </div>
+  <div id="log" class="panel"></div>
 </div>
 
 <script>
-//========================
-// 基本設定
-//========================
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
-let tileSize=32, mapSize=20;
+// ---------- 基礎資料 ----------
+const TILE = 16; // 像素風格格子
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
 
-// 圖像載入
-let playerImg = new Image(); playerImg.src="player.png";
-let slimeImg = new Image(); slimeImg.src="slime.png";
-let goblinImg = new Image(); goblinImg.src="goblin.png";
-let orcImg = new Image(); orcImg.src="orc.png";
-let npcImg = new Image(); npcImg.src="npc.png";
-let tileGrass = new Image(); tileGrass.src="tile_grass.png";
-let tileTree = new Image(); tileTree.src="tile_tree.png";
-let tileHouse = new Image(); tileHouse.src="tile_house.png";
+const areas = {
+  forest: {name:'森林地帶', w:80, h:60, color:'#1a5', enemyRate:0.003},
+  desert: {name:'荒漠沙域', w:80, h:60, color:'#c95', enemyRate:0.0025},
+  swamp:  {name:'陰鬱沼澤', w:80, h:60, color:'#473', enemyRate:0.004}
+};
+let currentAreaKey = 'forest';
 
-// 屬性 & 技能名稱
-const elements=["fire","water","wind","earth","light","dark"];
-const skillNames={
-  fire:"地獄業火", water:"深淵潮噬", wind:"颶風裂空",
-  earth:"大地崩裂", light:"聖光審判", dark:"暗影烈焰"
+// 玩家資料
+const player = {
+  name:'路西法的遺孤', x:40, y:30, vx:0, vy:0, speed:3,
+  hp:100, maxHp:100, mp:30, maxMp:30, mpRegen:0.5, atk:5,
+  inventory:[], weapon:null, level:1
 };
 
-function isEffective(att,def){
-  const strongAgainst={fire:"wind", water:"fire", wind:"earth", earth:"light", light:"dark", dark:"light"};
-  return strongAgainst[att]===def;
+// 屬性與中二招式名稱
+const ELEMENTS = {
+  fire: {name:'火', skill:'地獄業火'},
+  water:{name:'水', skill:'深海咒潮'},
+  wind: {name:'風', skill:'烈風斷章'},
+  earth:{name:'地', skill:'大地裁決'},
+  light:{name:'光', skill:'聖焰審判'},
+  dark: {name:'闇', skill:'破滅黯影'}
+};
+
+// 怪物定義（像素風外觀只用矩形顏色）
+const ENEMY_TYPES = [
+  {id:'slime', name:'史萊姆', hp:20, atk:2, color:'#6f6', elem:'water'},
+  {id:'gob', name:'哥布林', hp:30, atk:4, color:'#7a5', elem:'earth'},
+  {id:'orc', name:'半獸人', hp:45, atk:7, color:'#a55', elem:'fire'},
+  {id:'lizard', name:'蜥人', hp:35, atk:5, color:'#8b6', elem:'earth'},
+  {id:'elf', name:'精靈', hp:28, atk:6, color:'#6cf', elem:'wind'},
+  {id:'ghost', name:'鬼', hp:22, atk:5, color:'#ccc', elem:'dark'}
+];
+
+let enemies = []; // 當前區域怪物
+let keysDown = {};
+let logEl = document.getElementById('log');
+
+// 任務系統範例
+let quest = {id:null, title:null, desc:null, target:null, count:0, goal:0, reward:null};
+
+// 抽卡池（代表性角色簡化）
+const gachaPool = {
+  '5': [ {name:'赤炎王·焰獄', elem:'fire'},{name:'蒼風皇·斷章', elem:'wind'}],
+  '4': [ {name:'淨光祭司', elem:'light'},{name:'深海執鞭', elem:'water'}],
+  '3': [ {name:'邊境弓手', elem:'wind'},{name:'駐守騎士', elem:'earth'}]
 }
 
-// 玩家選擇職業與屬性
-let player={};
-let job=prompt("選職業：1戰士 2法師","1");
-let ele=prompt("選屬性：fire water wind earth light dark","fire");
-player={x:5,y:5,hp:120,atk:15,skillAtk:25,color:"#ffff00",job:job==="1"?"戰士":"法師",exp:0,level:1,weapon:0,armor:0,element:ele};
+// ---------- 輔助 ----------
+function log(msg){
+  const p = document.createElement('div'); p.textContent = '['+new Date().toLocaleTimeString()+'] '+msg; logEl.prepend(p);
+}
+function rnd(n){return Math.random()*n}
+function randInt(min,max){return Math.floor(Math.random()*(max-min+1))+min}
 
-// 怪物設定
-const monsters=[
-  {name:"史萊姆", hp:30, atk:5, element:"water", img:slimeImg, exp:10},
-  {name:"哥布林", hp:50, atk:8, element:"earth", img:goblinImg, exp:20},
-  {name:"半獸人", hp:80, atk:12, element:"fire", img:orcImg, exp:40}
-];
-let currentMonster=null;
+// ---------- 地圖與視窗 ----------
+const view = {w:canvas.width, h:canvas.height, scrollX:0, scrollY:0};
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
 
-// NPC
-const npcs=[
-  {x:10,y:3,name:"村長", dialog:["勇者！幫我打倒3隻史萊姆！"], quest:{type:"kill",target:"史萊姆",count:3,progress:0,reward:{exp:30,weapon:5}}}
-];
-
-// 地圖生成 (0:草,1:樹,2:房)
-let map=[];
-for(let y=0;y<mapSize;y++){
-  map[y]=[];
-  for(let x=0;x<mapSize;x++){
-    let r=Math.random();
-    map[y][x]=r<0.1?2:r<0.3?1:0;
+function spawnEnemiesForArea(){
+  enemies = [];
+  const info = areas[currentAreaKey];
+  // 依據area.enemyRate生成一些敵人
+  for(let i=0;i<Math.floor(info.w*info.h*info.enemyRate*10);i++){
+    const t = ENEMY_TYPES[randInt(0,ENEMY_TYPES.length-1)];
+    enemies.push({type:t.id,name:t.name,x:randInt(2,info.w-3),y:randInt(2,info.h-3),hp:t.hp,maxHp:t.hp,atk:t.atk,color:t.color,elem:t.elem});
   }
 }
 
-//========================
-// 繪圖
-//========================
-let skillAnimations=[];
-function drawSkillAnimations(){
-  skillAnimations.forEach((s,i)=>{
-    s.y-=2; s.frame++;
-    ctx.fillStyle=`rgba(255,0,0,${1-s.frame/20})`;
-    ctx.beginPath(); ctx.arc(s.x+tileSize/2,s.y+tileSize/2,s.size,0,Math.PI*2); ctx.fill();
-    if(s.frame>20) skillAnimations.splice(i,1);
-  });
+function changeArea(key,tx,ty){
+  currentAreaKey = key; document.getElementById('areaName').textContent = '區域：'+areas[key].name;
+  // 將座標移到指定或中心
+  const a = areas[key];
+  player.x = tx!==undefined?tx:Math.floor(a.w/2);
+  player.y = ty!==undefined?ty:Math.floor(a.h/2);
+  spawnEnemiesForArea();
+  log('已切換至區域：'+areas[key].name);
 }
 
-function drawMap(){
-  for(let y=0;y<mapSize;y++){
-    for(let x=0;x<mapSize;x++){
-      let img=map[y][x]===0?tileGrass:map[y][x]===1?tileTree:tileHouse;
-      ctx.drawImage(img,x*tileSize,y*tileSize,tileSize,tileSize);
-    }
-  }
-}
-
-function drawPlayer(){ ctx.drawImage(playerImg,player.x*tileSize,player.y*tileSize,tileSize,tileSize);}
-function drawMonster(mon){ ctx.drawImage(mon.img,mon.x*tileSize,mon.y*tileSize,tileSize,tileSize);}
-function drawNPC(npc){ ctx.drawImage(npcImg,npc.x*tileSize,npc.y*tileSize,tileSize,tileSize);}
-
+// ---------- 繪製 ----------
 function draw(){
-  ctx.clearRect(0,0,640,640);
-  drawMap();
-  drawPlayer();
-  npcs.forEach(drawNPC);
-  if(currentMonster && currentMonster.inBattle) drawMonster(currentMonster);
-  if(skillAnimations.length>0) drawSkillAnimations();
-  requestAnimationFrame(draw);
-}
-draw();
-
-//========================
-// 狀態更新
-//========================
-function updatePlayerStats(){
-  document.getElementById("playerStats").textContent=`職業:${player.job} LV:${player.level} HP:${player.hp} 武器:${player.weapon} 防具:${player.armor} 屬性:${player.element}`;
-  document.getElementById("expBarFill").style.width=(player.exp%100)+"%";
-}
-updatePlayerStats();
-
-//========================
-// 戰鬥
-//========================
-function startBattle(monster){
-  currentMonster=JSON.parse(JSON.stringify(monster));
-  currentMonster.x=monster.x||Math.floor(Math.random()*mapSize);
-  currentMonster.y=monster.y||Math.floor(Math.random()*mapSize);
-  currentMonster.inBattle=true;
-  document.getElementById("monsterName").textContent="遇到："+currentMonster.name+" 屬性："+currentMonster.element;
-  document.getElementById("monsterHP").textContent="HP："+currentMonster.hp;
-  document.getElementById("battleUI").style.display="block";
-}
-
-document.getElementById("attackBtn").onclick=()=>{dealDamage(player.atk,false);}
-document.getElementById("skillBtn").onclick=()=>{dealDamage(player.skillAtk,true);}
-
-function dealDamage(dmg,isSkill){
-  if(isSkill){
-    alert("使用技能："+skillNames[player.element]+"！");
-    skillAnimations.push({x:player.x*tileSize,y:player.y*tileSize,size:10,frame:0});
-    if(isEffective(player.element,currentMonster.element)) dmg*=1.5;
+  // 背景
+  const area = areas[currentAreaKey];
+  ctx.fillStyle = '#0b0b0b'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  // 簡單地圖方塊
+  for(let i=0;i<Math.ceil(canvas.width/TILE);i++){
+    for(let j=0;j<Math.ceil(canvas.height/TILE);j++){
+      ctx.fillStyle = area.color;
+      ctx.fillRect((i*TILE)-((player.x* TILE)-canvas.width/2)%TILE,(j*TILE)-((player.y* TILE)-canvas.height/2)%TILE,TILE-1,TILE-1);
+    }
   }
-  currentMonster.hp-=dmg;
-  if(currentMonster.hp<=0){
-    alert("你打敗了 "+currentMonster.name+"！");
-    player.exp+=currentMonster.exp;
-    checkLevelUp();
-    document.getElementById("battleUI").style.display="none";
-    currentMonster=null;
-    updatePlayerStats();
-    checkQuestProgress();
-    return;
-  }
-  player.hp-=Math.max(0,currentMonster.atk-player.armor);
-  if(player.hp<=0){ alert("你被打敗了！遊戲結束"); location.reload();}
-  document.getElementById("monsterHP").textContent="HP："+currentMonster.hp;
-  updatePlayerStats();
+  // 計算視窗偏移（讓玩家置中）
+  view.scrollX = player.x * TILE - canvas.width/2;
+  view.scrollY = player.y * TILE - canvas.height/2;
+
+  // 繪製敵人與玩家（像素格）
+  enemies.forEach(e=>{
+    const sx = (e.x*TILE)-view.scrollX; const sy = (e.y*TILE)-view.scrollY;
+    ctx.fillStyle = e.color; ctx.fillRect(Math.round(sx),Math.round(sy),TILE*1.2,TILE*1.2);
+    // HP bar
+    ctx.fillStyle = '#000'; ctx.fillRect(sx,sy-5, TILEx(1.4),4);
+    ctx.fillStyle = '#f33'; ctx.fillRect(sx,sy-5, Math.max(0,(e.hp/e.maxHp)*(TILE*1.4)),4);
+  });
+  // 主角
+  const px = canvas.width/2; const py = canvas.height/2;
+  // 方形像素角色
+  ctx.fillStyle = '#fff'; ctx.fillRect(px-TILE/1.6,py-TILE/1.6,TILE*1.2,TILE*1.2);
+  // face
+  ctx.fillStyle = '#000'; ctx.fillRect(px-2,py-2,1,1); ctx.fillRect(px+2,py-2,1,1);
+
+  // HUD
+  document.getElementById('hp').textContent = player.hp.toFixed(0);
+  document.getElementById('maxHp').textContent = player.maxHp;
+  document.getElementById('mp').textContent = player.mp.toFixed(1);
+  document.getElementById('maxMp').textContent = player.maxMp;
+  document.getElementById('weapon').textContent = player.weapon?player.weapon.name:'未裝備';
+  document.getElementById('atk').textContent = player.atk + (player.weapon?player.weapon.atk:0);
 }
 
-function checkLevelUp(){
-  while(player.exp>=player.level*100){
-    player.exp-=player.level*100;
-    player.level++;
-    player.hp+=20;
-    player.atk+=5;
-    player.skillAtk+=10;
-    alert("升級了！現在等級:"+player.level);
-  }
-}
+// small helper to avoid long ref
+function TILEx(f){return TILE * f}
 
-// 任務系統
-function checkQuestProgress(){
-  npcs.forEach(npc=>{
-    if(npc.quest && currentMonster){
-      if(currentMonster.name===npc.quest.target){
-        npc.quest.progress++;
-        if(npc.quest.progress>=npc.quest.count){
-          alert("任務完成！獲得經驗:"+npc.quest.reward.exp+" 武器:"+npc.quest.reward.weapon);
-          player.exp+=npc.quest.reward.exp;
-          player.weapon+=npc.quest.reward.weapon;
-          npc.quest=null;
-          updatePlayerStats();
-        }
-      }
+// ---------- 遊戲更新 ----------
+let lastTime=performance.now();
+function update(now){
+  const dt=(now-lastTime)/1000; lastTime=now;
+  // 移動
+  let mvx=0,mvy=0;
+  if(keysDown['ArrowLeft']||keysDown['a']) mvx=-1;
+  if(keysDown['ArrowRight']||keysDown['d']) mvx=1;
+  if(keysDown['ArrowUp']||keysDown['w']) mvy=-1;
+  if(keysDown['ArrowDown']||keysDown['s']) mvy=1;
+  if(mvx!==0||mvy!==0){
+    const mag = Math.hypot(mvx,mvy); mvx/=mag; mvy/=mag;
+    player.x += mvx * player.speed * dt * 10 / TILE; // 轉換成地圖格
+    player.y += mvy * player.speed * dt * 10 / TILE;
+    const a=areas[currentAreaKey];
+    player.x = clamp(player.x,1,a.w-2); player.y = clamp(player.y,1,a.h-2);
+  }
+  // MP 恢復
+  player.mp = clamp(player.mp + player.mpRegen * dt, 0, player.maxMp);
+
+  // 簡單敵人近距離傷害（若接近主角）
+  enemies.forEach(e=>{
+    const dist = Math.hypot(e.x-player.x,e.y-player.y);
+    if(dist<0.9){ // 近戰接觸
+      // 對主角造成小量傷害
+      // 基於演示，後續加入冷卻
+      player.hp = clamp(player.hp - e.atk * dt * 0.4, 0, player.maxHp);
     }
   });
+
+  // 任務檢查
+  if(quest.id && quest.target){
+    // 比如目標是殺死某類怪物（簡化）
+    // 本 prototype 以按鈕模擬完成；實際可以在殺死敵人時增加count
+  }
+
+  draw();
+  requestAnimationFrame(update);
+}
+requestAnimationFrame(update);
+
+// ---------- 輸入 ----------
+window.addEventListener('keydown',e=>{ keysDown[e.key]=true; handleKeyDown(e); });
+window.addEventListener('keyup',e=>{ delete keysDown[e.key]; });
+
+function handleKeyDown(e){
+  if(e.key==='1') useSkill(1);
+  if(e.key==='2') useSkill(2);
+  if(e.key==='3') useSkill(3);
+  if(e.key==='e' || e.key==='E') interact();
+  if(e.key==='g' || e.key==='G') openGacha();
 }
 
-// NPC 對話
-function interactNPC(){
-  npcs.forEach(npc=>{
-    if(Math.abs(player.x-npc.x)<=1 && Math.abs(player.y-npc.y)<=1){
-      document.getElementById("dialogText").textContent=npc.dialog[0];
-      document.getElementById("dialogUI").style.display="block";
+// ---------- 技能 ----------
+const playerSkills = [
+  {elem:'fire', name: ELEMENTS.fire.skill, cost:5, power:18},
+  {elem:'wind', name: ELEMENTS.wind.skill, cost:3, power:12},
+  {elem:'light',name: ELEMENTS.light.skill,cost:8, power:28}
+];
+
+function useSkill(slot){
+  const s = playerSkills[slot-1]; if(!s) return;
+  if(player.mp < s.cost){ log('MP不足，無法施放 '+s.name); return; }
+  player.mp -= s.cost; log('施放 '+s.name+'（'+s.elem+'） 造成範圍傷害');
+  // 對附近敵人造成傷害（簡單計算）
+  enemies.forEach(e=>{
+    const dist = Math.hypot(e.x-player.x,e.y-player.y);
+    if(dist < 3){
+      const dmg = s.power + player.atk + (player.weapon?player.weapon.atk:0);
+      e.hp -= dmg;
+      log('命中 '+e.name+'，造成 '+Math.round(dmg)+' 傷害');
     }
   });
+  // 清理死亡的敵人
+  const before = enemies.length;
+  enemies = enemies.filter(e=>e.hp>0);
+  const dead = before - enemies.length;
+  if(dead>0) log('擊殺 '+dead+' 個敵人');
 }
-document.getElementById("closeDialogBtn").onclick=()=>{document.getElementById("dialogUI").style.display="none";}
 
-//========================
-// 移動與遇怪
-//========================
-document.addEventListener("keydown",(e)=>{
-  if(document.getElementById("battleUI").style.display==="block") return;
-  if(document.getElementById("dialogUI").style.display==="block") return;
+// ---------- 互動與任務 ----------
+function interact(){
+  // 在地圖特定座標模擬村莊NPC（例如當x,y某範圍內）
+  if(Math.hypot(player.x-40,player.y-30) < 2){
+    // 給一個任務
+    quest = {id:1,title:'淨化史萊姆之地',desc:'消滅 3 個 史萊姆',target:'slime',count:0,goal:3,reward:{gold:100}};
+    document.getElementById('questArea').textContent = quest.title + '：' + quest.desc;
+    log('接取任務：'+quest.title);
+  } else {
+    // 切換區域示範（若靠近地圖邊緣）
+    const a = areas[currentAreaKey];
+    if(player.x > a.w-2) changeArea('desert',2,Math.min(player.y,areas['desert'].h-3));
+    else if(player.x < 2) changeArea('swamp',areas['swamp'].w-3,Math.min(player.y,areas['swamp'].h-3));
+    else log('附近沒有可互動的物件');
+  }
+}
 
-  let moved=false;
-  if(e.key==="ArrowUp"){player.y--;moved=true;}
-  if(e.key==="ArrowDown"){player.y++;moved=true;}
-  if(e.key==="ArrowLeft"){player.x--;moved=true;}
-  if(e.key==="ArrowRight"){player.x++;moved=true;}
-
-  player.x=Math.max(0,Math.min(mapSize-1,player.x));
-  player.y=Math.max(0,Math.min(mapSize-1,player.y));
-
-  if(moved && Math.random()<0.1) startBattle(monsters[Math.floor(Math.random()*monsters.length)]);
-  if(e.key===" ") interactNPC();
+// 完成任務（測試按鈕）
+document.getElementById('btnCompleteQuest').addEventListener('click',()=>{
+  if(quest && quest.id){ log('任務完成：獲得 '+quest.reward.gold+' 金幣'); quest={}; document.getElementById('questArea').textContent='目前無任務。'; }
 });
+
+// ---------- 裝備 ----------
+document.getElementById('btnEquipSword').addEventListener('click',()=>{
+  player.weapon = {name:'烈焰長劍',atk:10}; log('裝備 '+player.weapon.name+'，攻擊+'+player.weapon.atk);
+});
+
+// ---------- 抽卡（招募） ----------
+function openGacha(){
+  // 三星/四星/五星機率：80/15/5
+  const r = Math.random()*100;
+  let rarity;
+  if(r < 5) rarity='5';
+  else if(r<20) rarity='4';
+  else rarity='3';
+  const pool = gachaPool[rarity];
+  const pick = pool[randInt(0,pool.length-1)];
+  log('獲得 '+rarity+'★ '+pick.name+'（'+ELEMENTS[pick.elem].name+'）');
+  // 將角色加入 inventory
+  player.inventory.push({name:pick.name, rarity:rarity, elem:pick.elem});
+}
+
+// 按鈕也綁定
+document.getElementById('btnGacha').addEventListener('click',openGacha);
+
+document.getElementById('btnToggleHelp').addEventListener('click',()=>{
+  alert('操作：方向鍵/WASD 移動，1/2/3 技能，E 互動，G 抽卡。示範武器 / 任務 / 區域切換已實作。');
+});
+
+// ---------- 初始 ----------
+changeArea('forest');
+log('遊戲啟動 - 歡迎來到異世界');
+
 </script>
 </body>
 </html>
-
-
