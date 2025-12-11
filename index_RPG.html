@@ -1,179 +1,149 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>探索 RPG</title>
+<title>異世界 RPG</title>
 <style>
-    body { font-family: "Noto Sans TC", sans-serif; background:#222; color:#fff; display:flex; justify-content:center; align-items:center; height:100vh; }
-    .game-container { background:#333; padding:20px; border-radius:15px; width:95%; max-width:600px; }
-    h1 { text-align:center; }
-    .map { display:grid; grid-template-columns: repeat(5,40px); grid-gap:2px; margin:15px 0; }
-    .cell { width:40px; height:40px; background:#555; display:flex; justify-content:center; align-items:center; border-radius:5px; font-weight:bold; }
-    .player { background:#5a9; }
-    .battle-log { background:#444; padding:10px; border-radius:10px; height:150px; overflow-y:auto; margin-bottom:10px; }
-    button { padding:8px 15px; margin:3px; border:none; border-radius:8px; cursor:pointer; background:#5a9; color:#fff; }
-    button:hover{background:#7cb;}
+  body { background: #111; display: flex; justify-content: center; }
+  canvas { background: #000; image-rendering: pixelated; margin-top: 20px; }
+  #battleUI {
+    position: absolute;
+    top: 50px; left: 50%;
+    transform: translateX(-50%);
+    width: 300px;
+    padding: 15px;
+    background: #222;
+    color: white;
+    border: 2px solid white;
+    display: none;
+  }
+  button { margin-top: 10px; width: 100%; padding: 10px; }
 </style>
 </head>
 <body>
-<div class="game-container">
-    <h1>探索 RPG</h1>
-    <div class="map" id="map"></div>
-    <div class="stats" id="player-stats"></div>
-    <div class="battle-log" id="battle-log">使用箭頭鍵移動！</div>
-    <div class="actions">
-        <button onclick="attack()">攻擊</button>
-        <button onclick="defend()">防禦</button>
-        <button onclick="usePotion()">使用藥水</button>
-    </div>
+
+<canvas id="game" width="640" height="640"></canvas>
+
+<!-- 戰鬥介面 -->
+<div id="battleUI">
+  <h3 id="monsterName"></h3>
+  <p id="monsterHP"></p>
+  <button id="attackBtn">攻擊</button>
 </div>
 
 <script>
-const mapSize = 5;
-let map = [];
-let player = {x:0,y:0,hp:100,maxHp:100,attack:20,defense:10,potions:3,level:1,exp:0};
-let enemy = null;
-const enemies = [
-    {name:"史萊姆", hp:30, attack:5, defense:2, exp:10},
-    {name:"半獸人", hp:60, attack:15, defense:5, exp:25},
-    {name:"哥布林", hp:40, attack:10, defense:3, exp:15}
+//========================
+// 基本設定
+//========================
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+let tileSize = 32;
+let mapSize = 20;
+
+// 角色資料
+let player = { x: 5, y: 5, hp: 100, atk: 10 };
+
+// 怪物列表
+const monsters = [
+  { name: "史萊姆", hp: 30, atk: 5, color: "#00c0ff" },
+  { name: "哥布林", hp: 50, atk: 8, color: "#00ff00" },
+  { name: "半獸人", hp: 80, atk: 12, color: "#ff6600" }
 ];
-const mapEl = document.getElementById("map");
-const statsEl = document.getElementById("player-stats");
-const logEl = document.getElementById("battle-log");
 
-function initMap(){
-    map = [];
-    for(let y=0;y<mapSize;y++){
-        let row=[];
-        for(let x=0;x<mapSize;x++){
-            if(Math.random()<0.3){ row.push('E'); } // 30%機率有敵人
-            else{ row.push(''); }
-        }
-        map.push(row);
+let currentMonster = null;
+
+//========================
+// 建立地圖
+//========================
+let map = [];
+for (let y = 0; y < mapSize; y++) {
+  map[y] = [];
+  for (let x = 0; x < mapSize; x++) {
+    map[y][x] = Math.random() < 0.15 ? 1 : 0; // 1 = 樹
+  }
+}
+
+//========================
+// 繪製地圖 & 玩家
+//========================
+function drawMap() {
+  for (let y = 0; y < mapSize; y++) {
+    for (let x = 0; x < mapSize; x++) {
+      ctx.fillStyle = map[y][x] === 0 ? "#2e8b57" : "#145214";
+      ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
     }
-    map[player.y][player.x]='P';
-    drawMap();
-    updateStats();
+  }
 }
 
-function drawMap(){
-    mapEl.innerHTML='';
-    for(let y=0;y<mapSize;y++){
-        for(let x=0;x<mapSize;x++){
-            const div = document.createElement('div');
-            div.className='cell';
-            if(map[y][x]==='P') div.classList.add('player');
-            else if(map[y][x]==='E') div.textContent='⚔';
-            mapEl.appendChild(div);
-        }
-    }
+function drawPlayer() {
+  ctx.fillStyle = "yellow";
+  ctx.fillRect(player.x * tileSize, player.y * tileSize, tileSize, tileSize);
 }
 
-function updateStats(){
-    statsEl.innerHTML=`${player.hp}/${player.maxHp} HP | 藥水:${player.potions} | LV:${player.level} EXP:${player.exp}`;
+//========================
+// 主畫面 loop
+//========================
+function draw() {
+  ctx.clearRect(0, 0, 640, 640);
+  drawMap();
+  drawPlayer();
+  requestAnimationFrame(draw);
+}
+draw();
+
+//========================
+// 遇怪 + 戰鬥
+//========================
+function startBattle() {
+  currentMonster = JSON.parse(JSON.stringify(
+    monsters[Math.floor(Math.random() * monsters.length)]
+  ));
+
+  document.getElementById("monsterName").textContent = "你遇到了：" + currentMonster.name;
+  document.getElementById("monsterHP").textContent = "HP：" + currentMonster.hp;
+  document.getElementById("battleUI").style.display = "block";
 }
 
-document.addEventListener('keydown', (e)=>{
-    if(enemy) return; // 遇敵時不能移動
-    let dx=0,dy=0;
-    if(e.key==='ArrowUp') dy=-1;
-    else if(e.key==='ArrowDown') dy=1;
-    else if(e.key==='ArrowLeft') dx=-1;
-    else if(e.key==='ArrowRight') dx=1;
-    movePlayer(dx,dy);
+document.getElementById("attackBtn").onclick = () => {
+  // 攻擊怪物
+  currentMonster.hp -= player.atk;
+  if (currentMonster.hp <= 0) {
+    alert("你打敗了 " + currentMonster.name + "！");
+    document.getElementById("battleUI").style.display = "none";
+    return;
+  }
+
+  // 怪物反擊
+  player.hp -= currentMonster.atk;
+  if (player.hp <= 0) {
+    alert("你被打敗了！遊戲結束");
+    location.reload();
+  }
+
+  document.getElementById("monsterHP").textContent = "HP：" + currentMonster.hp;
+};
+
+//========================
+// 控制角色走動
+//========================
+document.addEventListener("keydown", (e) => {
+  if (document.getElementById("battleUI").style.display === "block") return;
+
+  if (e.key === "ArrowUp") player.y--;
+  if (e.key === "ArrowDown") player.y++;
+  if (e.key === "ArrowLeft") player.x--;
+  if (e.key === "ArrowRight") player.x++;
+
+  player.x = Math.max(0, Math.min(mapSize - 1, player.x));
+  player.y = Math.max(0, Math.min(mapSize - 1, player.y));
+
+  // 10% 遇怪機率
+  if (Math.random() < 0.10) startBattle();
 });
-
-function movePlayer(dx,dy){
-    let newX = player.x+dx;
-    let newY = player.y+dy;
-    if(newX<0||newX>=mapSize||newY<0||newY>=mapSize) return;
-    map[player.y][player.x]='';
-    player.x=newX;
-    player.y=newY;
-    if(map[player.y][player.x]==='E'){
-        startBattle();
-    }
-    map[player.y][player.x]='P';
-    drawMap();
-}
-
-function startBattle(){
-    enemy = {...enemies[Math.floor(Math.random()*enemies.length)]};
-    logMessage(`遇到敵人：${enemy.name}！`);
-}
-
-function logMessage(msg){
-    logEl.innerHTML+=`<p>${msg}</p>`;
-    logEl.scrollTop = logEl.scrollHeight;
-    updateStats();
-}
-
-function attack(){
-    if(!enemy) return;
-    let damage = Math.max(player.attack-enemy.defense,0);
-    enemy.hp-=damage;
-    logMessage(`你攻擊 ${enemy.name}，造成 ${damage} 點傷害！`);
-    if(enemy.hp<=0){ enemy.hp=0; winBattle(); return;}
-    enemyTurn();
-}
-
-function defend(){
-    if(!enemy) return;
-    logMessage("你提升防禦！");
-    player.defense+=5;
-    enemyTurn();
-    player.defense-=5;
-}
-
-function usePotion(){
-    if(!enemy) return;
-    if(player.potions>0){
-        let heal = 30;
-        player.hp=Math.min(player.hp+heal,player.maxHp);
-        player.potions--;
-        logMessage(`你使用藥水，回復 ${heal} HP！`);
-        enemyTurn();
-    }else logMessage("沒有藥水了！");
-}
-
-function enemyTurn(){
-    let damage = Math.max(enemy.attack-player.defense,0);
-    player.hp-=damage;
-    logMessage(`${enemy.name} 攻擊你，造成 ${damage} 點傷害！`);
-    if(player.hp<=0){
-        player.hp=0;
-        logMessage("你被打敗了！遊戲結束！");
-        disableButtons();
-    }
-}
-
-function winBattle(){
-    logMessage(`你打敗 ${enemy.name}！獲得 ${enemy.exp} EXP！`);
-    gainExp(enemy.exp);
-    enemy=null;
-}
-
-function gainExp(amount){
-    player.exp+=amount;
-    if(player.exp>=50){
-        player.level++;
-        player.maxHp+=20;
-        player.attack+=5;
-        player.defense+=5;
-        player.hp=player.maxHp;
-        player.exp=0;
-        logMessage(`你升級了！LV:${player.level}`);
-    }
-}
-
-function disableButtons(){
-    document.querySelectorAll("button").forEach(b=>b.disabled=true);
-}
-
-initMap();
 </script>
+
 </body>
 </html>
+
 
