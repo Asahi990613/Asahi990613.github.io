@@ -6,11 +6,11 @@
     <title>我的音樂網頁</title>
 
     <style>
-        /* 背景直接用你給的圖片 */
+        /* 使用你的背景圖片：下載.jpg */
         body {
             margin: 0;
             font-family: "Noto Sans TC", sans-serif;
-            background: url("rowlet-bg.jpg") no-repeat center center / cover;
+            background: url("下載.jpg") no-repeat center center / cover;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -90,7 +90,28 @@
         const player = document.getElementById("player");
         const playlistItems = document.querySelectorAll(".playlist-item");
 
-        playlistItems.forEach
+        playlistItems.forEach(item => {
+            item.addEventListener("click", function () {
+                const src = this.getAttribute("data-src");
+                document.getElementById("audioSource").src = src;
+
+                player.load();
+                player.play();
+
+                playlistItems.forEach(i => i.classList.remove("playing"));
+                this.classList.add("playing");
+            });
+        });
+
+        player.addEventListener("ended", () => {
+            let current = [...playlistItems].findIndex(i => i.classList.contains("playing"));
+            let next = (current + 1) % playlistItems.length;
+            playlistItems[next].click();
+        });
+    </script>
+
+</body>
+</html>
 
 
 
