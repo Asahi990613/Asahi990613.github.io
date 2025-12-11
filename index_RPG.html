@@ -390,6 +390,31 @@ if(window.regionData && regionData.village){
 }
 
 // --- End Hotfix ---
+// --- Region Switcher ---
+function switchRegion(name){
+  if(!window.regionData || !regionData[name]) return;
+  currentRegion = regionData[name];
+  player.x = currentRegion.spawnX || 200;
+  player.y = currentRegion.spawnY || 200;
+  enemies = [];
+  spawnEnemies();
+}
+// Ensure all regions have spawn points
+if(window.regionData){
+  Object.keys(regionData).forEach(r=>{
+    regionData[r].spawnX = regionData[r].spawnX || 200;
+    regionData[r].spawnY = regionData[r].spawnY || 200;
+  });
+}
+// --- End Region Switcher ---
 </script>
+<div id="regionMenu" style="position:fixed;top:10px;left:10px;background:#222;padding:10px;border-radius:8px;color:#fff;font-family:sans-serif;z-index:9999;">
+  <div style="margin-bottom:6px;font-weight:bold;">選擇區域</div>
+  <button onclick="switchRegion('village')">村莊</button>
+  <button onclick="switchRegion('forest')">森林</button>
+  <button onclick="switchRegion('desert')">沙漠</button>
+  <button onclick="switchRegion('swamp')">沼澤</button>
+  <button onclick="switchRegion('dungeon')">地城</button>
+</div>
 </body>
 </html>
