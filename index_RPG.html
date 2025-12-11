@@ -331,6 +331,22 @@ function changeArea(key){ currentArea = AREAS[key]; document.getElementById('are
 /* --------- 初始啟動 --------- */
 changeArea('village'); player.x=20; player.y=12; log('遊戲啟動 - 歡迎來到異世界');
 requestAnimationFrame(gameLoop);
+// --- Hotfix: Restore player movement and monster variety ---
+window.addEventListener('keydown',e=>{ if(player){ player.keys = player.keys||{}; player.keys[e.key]=true; }});
+window.addEventListener('keyup',e=>{ if(player&&player.keys){ player.keys[e.key]=false; }});
+
+function hotfixMovement(){
+  if(player){ player.canMove = true; player.speed = player.speed || 120; }
+}
+setInterval(hotfixMovement,500);
+
+// Restore region monster tables
+if(window.regionData){
+  if(regionData.forest) regionData.forest.monsters = ['Slime','Goblin','Elf'];
+  if(regionData.desert) regionData.desert.monsters = ['Lizard','Orc','Ghost'];
+  if(regionData.swamp)  regionData.swamp.monsters  = ['Slime','Goblin','Ghost'];
+}
+// --- End Hotfix ---
 </script>
 </body>
 </html>
