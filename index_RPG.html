@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>簡單RPG遊戲</title>
+    <style>
+        body {
+            font-family: "Noto Sans TC", sans-serif;
+            background: #222;
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .game-container {
+            background: #333;
+            padding: 30px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 500px;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        .stats, .battle-log {
+            margin: 15px 0;
+        }
+
+        .battle-log {
+            height: 150px;
+            overflow-y: auto;
+            background: #444;
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            background-color: #5a9;
+            color: white;
+            font-size: 16px;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            background-color: #7cb;
+        }
+    </style>
+</head>
+<body>
+
+<div class="game-container">
+    <h1>簡單 RPG</h1>
+
+    <div class="stats">
+        <p id="player-stats"></p>
+        <p id="enemy-stats"></p>
+    </div>
+
+    <div class="battle-log" id="battle-log">
+        遊戲開始！選擇你的行動...
+    </div>
+
+    <div class="actions">
+        <button onclick="playerAttack()">攻擊</button>
+        <button onclick="playerDefend()">防禦</button>
+        <button onclick="usePotion()">使用藥水</button>
+    </div>
+</div>
+
+<script>
+    // 玩家資料
+    let player = {
+        name: "勇者",
+        hp: 100,
+        maxHp: 100,
+        attack: 20,
+        defense: 10,
+        potions: 3,
+        level: 1,
+        exp: 0
+    };
+
+    // 敵人資料
+    let enemy = {
+        name: "哥布林",
+        hp: 80,
+        maxHp: 80,
+        attack: 15,
+        defense: 5
+    };
+
+    const battleLog = document.getElementById("battle-log");
+    const playerStats = document.getElementById("player-stats");
+    const enemyStats = document.getElementById("enemy-stats");
+
+    function updateStats() {
+        playerStats.innerHTML = `${player.name} HP: ${player.hp}/${player.maxHp} | 藥水: ${player.potions} | LV: ${player.level} EXP: ${player.exp}`;
+        enemyStats.innerHTML = `${enemy.name} HP: ${enemy.hp}/${enemy.maxHp}`;
+    }
+
+    function logMessage(msg) {
+        battleLog.innerHTML += `<p>${msg}</p>`;
+        battleLog.scrollTop = battleLog.scrollHeight;
+    }
+
+    function playerAttack() {
+        let damage = Math.max(player.attack - enemy.defense, 0);
+        enemy.hp -= damage;
+        logMessage(`${player.name} 對 ${enemy.name} 造成 ${damage} 點傷害！`);
+        if (enemy.hp <= 0) {
+            enemy.hp = 0;
+            logMessage(`${enemy.name} 被打敗了！你獲得 20 經驗值！`);
+            gainExp(20);
+            resetEnemy();
+            return;
+        }
+        enemyTurn();
+        updateStats();
+    }
+
+    function playerDefend() {
+        logMessage(`${player.name} 提升防禦！`);
+        player.defense += 5;
+        enemyTurn();
+        player.defense -= 5; // 防禦只作用一次
+        updateStats();
+    }
+
+    function usePotion() {
+        if (player.potions > 0) {
+            let heal = 30;
+            player.hp = Math.min(player.hp + heal, player.maxHp);
+            player.potions--;
+            logMessage(`${player.name} 使用藥水，恢復 ${heal} HP！`);
+            enemyTurn();
+            updateStats();
+        } else {
+            logMessage("沒有藥水了！");
+        }
+    }
+
+    function enemyTurn() {
+        let damage = Math.max(enemy.attack - player.defense, 0);
+        player.hp -= damage;
+        logMessage(`${enemy.name} 攻擊 ${player.name}，造成 ${damage} 點傷害！`);
+        if (player.hp <= 0) {
+            player.hp = 0;
+            logMessage(`${player.name} 被打敗了！遊戲結束！`);
+            disableButtons();
+        }
+    }
+
+    function gainExp(amount) {
+        player.exp += amount;
+        if (player.exp >= 50) { // 每 50 exp 升級
+            player.level++;
+            player.maxHp += 20;
+            player.attack += 5;
+            player.defense += 5;
+            player.hp = player.maxHp;
+            player.exp = 0;
+            logMessage(`${player.name} 升級了！LV ${player.level}`);
+        }
+    }
+
+    function resetEnemy() {
+        enemy.hp = enemy.maxHp;
+        logMessage(`出現新的敵人：${enemy.name}`);
+    }
+
+    function disableButtons() {
+        document.querySelectorAll("button").forEach(b => b.disabled = true);
+    }
+
+    updateStats();
+</script>
+
+</body>
+</html>
