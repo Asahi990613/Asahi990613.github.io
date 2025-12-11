@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8" />
-<title>Pixel RPG - Full Upgrade</title>
+<title>Pixel RPG - Fixed Full Upgrade</title>
 <style>
   body{margin:0;background:#070707;color:#fff;font-family:monospace}
   canvas{display:block;margin:0 auto;background:#000;image-rendering:pixelated}
@@ -15,11 +15,13 @@
 </head>
 <body>
 <canvas id="game" width="960" height="540"></canvas>
+
 <div id="ui">
   HP:<span id="hp">0</span> MP:<span id="mp">0</span> ATK:<span id="atk">0</span><br>
   金幣:<span id="gold">0</span> EXP:<span id="exp">0</span> 等級:<span id="lv">1</span><br>
   任務:<span id="questText">無</span>
 </div>
+
 <div id="regionMenu">
   <div style="font-weight:bold">區域</div>
   <button onclick="changeArea('village')">村莊</button>
@@ -28,18 +30,22 @@
   <button onclick="changeArea('swamp')">沼澤</button>
   <button onclick="changeArea('dungeon')">地城</button>
 </div>
+
 <div id="dialogBox"><div id="dialogText"></div><div style="text-align:right;margin-top:8px"><button onclick="nextDialog()">下一步</button></div></div>
 <div id="shopUI"></div>
 <div id="questUI"></div>
+
 <script>
 // -------------------- 基本 --------------------
 const canvas = document.getElementById('game'), ctx = canvas.getContext('2d');
 let keys = {};
+const player = {
+  x:480,y:270,w:20,h:20,hp:120,maxHp:120,mp:60,maxMp:60,mpRegen:0.2,
+  atk:6,lv:1,exp:0,expNext:100,isMember:false,inv:[]
+};
+let gold = 30;
 
-const player = {x:480,y:270,w:20,h:20,hp:120,maxHp:120,mp:60,maxMp:60,mpRegen:0.2,atk:6,lv:1,exp:0,expNext:100,isMember:false,inv:[]};
-let gold=30;
-
-// -------------------- 地區 & 美術（簡易像素） --------------------
+// -------------------- 地區 --------------------
 const AREAS = {
   village:{key:'village',name:'村莊',color:'#bda78a',buildings:[],npcs:[]},
   forest:{key:'forest',name:'森林',color:'#103814'},
@@ -51,8 +57,14 @@ let currentArea = AREAS.village;
 
 function initVillage(){
   const v = AREAS.village;
-  v.buildings = [ {x:140,y:200,w:110,h:70,c:'#6b3',name:'武器店',type:'shop'}, {x:320,y:180,w:140,h:90,c:'#666',name:'冒險者公會',type:'guild'} ];
-  v.npcs = [ {x:170,y:250,c:'#fff',name:'店員',role:'shop'}, {x:360,y:250,c:'#ffd',name:'公會接待',role:'guild'} ];
+  v.buildings = [
+    {x:140,y:200,w:110,h:70,c:'#6b3',name:'武器店',type:'shop'},
+    {x:320,y:180,w:140,h:90,c:'#666',name:'冒險者公會',type:'guild'}
+  ];
+  v.npcs = [
+    {x:170,y:250,c:'#fff',name:'店員',role:'shop'},
+    {x:360,y:250,c:'#ffd',name:'公會接待',role:'guild'}
+  ];
 }
 initVillage();
 
@@ -65,32 +77,86 @@ const MONS = [
   {id:'ghost',name:'鬼',hp:90,atk:10,c:'#aaa',rank:'A'}
 ];
 const BOSSES = [ {id:'abyss',name:'深淵鬼王',hp:400,atk:24,c:'#b22',rank:'S'} ];
-let enemies=[];
+let enemies = [];
 
-function spawnEnemies(areaKey){ enemies=[]; if(areaKey.key==='village') return; let count=6; if(areaKey.key==='dungeon') count=8; for(let i=0;i<count;i++){ let m = MONS[Math.floor(Math.random()*MONS.length)]; enemies.push({x:Math.random()*880+40,y:Math.random()*460+30,w:22,h:22,name:m.name,hp:m.hp,maxHP:m.hp,atk:m.atk,c:m.c}); } if(areaKey.key==='dungeon' && Math.random()<0.6) enemies.push({x:500,y:150,w:48,h:48,name:BOSSES[0].name,hp:BOSSES[0].hp,maxHP:BOSSES[0].hp,atk:BOSSES[0].atk,c:BOSSES[0].c,boss:true}); }
+// -------------------- spawnEnemies (唯一實作) --------------------
+function spawnEnemies(areaKey){
+  enemies = [];
+  if(areaKey.key === 'village') return;
+  let count = (areaKey.key === 'dungeon') ? 8 : 6;
+  for(let i=0;i<count;i++){
+    const m = MONS[Math.floor(Math.random()*MONS.length)];
+    enemies.push({
+      x: Math.random()*(canvas.width-80)+40,
+      y: Math.random()*(canvas.height-140)+60,
+      w: 22, h: 22, name: m.name, hp: m.hp, maxHP: m.hp, atk: m.atk, c: m.c
+    });
+  }
+  if(areaKey.key === 'dungeon' && Math.random() < 0.6){
+    enemies.push({
+      x: Math.random()*(canvas.width-160)+80,
+      y: 100,
+      w: 48, h:48, name: BOSSES[0].name, hp: BOSSES[0].hp, maxHP: BOSSES[0].hp, atk: BOSSES[0].atk, c: BOSSES[0].c, boss:true
+    });
+  }
+}
 
-// -------------------- 技能（按鍵 1~6） --------------------
+// -------------------- 技能（1~6） --------------------
 const SKILLS = {
-  1:{name:'地獄業火',mp:12,dmg:36,type:'fire',fx:'fire'},
-  2:{name:'深海咒潮',mp:10,dmg:30,type:'water',fx:'water'},
-  3:{name:'烈風斷章',mp:8,dmg:24,type:'wind',fx:'wind'},
-  4:{name:'大地裁決',mp:14,dmg:40,type:'earth',fx:'earth'},
-  5:{name:'聖焰審判',mp:20,dmg:60,type:'light',fx:'light'},
-  6:{name:'破滅黯影',mp:18,dmg:55,type:'dark',fx:'dark'}
+  1:{name:'地獄業火',mp:12,dmg:36,fx:'fire'},
+  2:{name:'深海咒潮',mp:10,dmg:30,fx:'water'},
+  3:{name:'烈風斷章',mp:8,dmg:24,fx:'wind'},
+  4:{name:'大地裁決',mp:14,dmg:40,fx:'earth'},
+  5:{name:'聖焰審判',mp:20,dmg:60,fx:'light'},
+  6:{name:'破滅黯影',mp:18,dmg:55,fx:'dark'}
 };
-function castSkill(i){ const s=SKILLS[i]; if(!s) return; if(player.mp<s.mp){ showDialog(['MP不足']); return; } player.mp-=s.mp; // damage aoe
- enemies.forEach(e=>{ let dist = Math.hypot((e.x+e.w/2)-(player.x+player.w/2),(e.y+e.h/2)-(player.y+player.h/2)); if(dist<160) { e.hp -= s.dmg; if(e.hp<=0) onEnemyDefeated(e); } }); spawnEffect(s.fx,player.x,player.y); }
+let effects = [];
+function spawnEffect(type,x,y){ effects.push({type,x,y,t:0}); }
 
-// -------------------- 特效 --------------------
-let effects=[]; function spawnEffect(type,x,y){ effects.push({type,x,y,t:0}); }
+function castSkill(i){
+  const s = SKILLS[i];
+  if(!s) return;
+  if(player.mp < s.mp){ showDialog([`MP不足：${s.name}`]); return; }
+  player.mp -= s.mp;
+  // AoE damage around player
+  enemies.forEach(e => {
+    const dx = (e.x+e.w/2)-(player.x+player.w/2);
+    const dy = (e.y+e.h/2)-(player.y+player.h/2);
+    const dist = Math.hypot(dx,dy);
+    if(dist < 160){
+      e.hp -= s.dmg;
+      if(e.hp <= 0) onEnemyDefeated(e);
+    }
+  });
+  spawnEffect(s.fx, player.x, player.y);
+}
 
 // -------------------- 商店 --------------------
-const SHOP = [ {name:'初級木劍',atk:2,price:20},{name:'青銅劍',atk:6,price:80},{name:'鐵劍',atk:12,price:200},{name:'勇者之刃',atk:28,price:600} ];
-function openShopUI(){ let html='<h3>武器店</h3>'; SHOP.forEach(it=> html+=`<div>${it.name} ATK+${it.atk} ${it.price}G <button onclick="buy(\'${it.name}\')">買</button></div>`); html+='<br><button onclick="closeShopUI()">關閉</button>'; document.getElementById('shopUI').innerHTML=html; document.getElementById('shopUI').style.display='block'; }
-function closeShopUI(){ document.getElementById('shopUI').style.display='none'; }
-function buy(name){ const it=SHOP.find(i=>i.name===name); if(!it) return; if(gold<it.price){ showDialog(['金幣不足']); return;} gold-=it.price; player.atk=it.atk; showDialog(['購買成功：'+it.name]); closeShopUI(); }
+const SHOP = [
+  {name:'初級木劍',atk:2,price:20},
+  {name:'青銅劍',atk:6,price:80},
+  {name:'鐵劍',atk:12,price:200},
+  {name:'勇者之刃',atk:28,price:600}
+];
+function openShopUI(){
+  let html = '<h3>武器店</h3>';
+  SHOP.forEach(it => html += `<div>${it.name} ATK+${it.atk} ${it.price}G <button onclick="buy('${it.name}')">買</button></div>`);
+  html += '<br><button onclick="closeShopUI()">關閉</button>';
+  document.getElementById('shopUI').innerHTML = html;
+  document.getElementById('shopUI').style.display = 'block';
+}
+function closeShopUI(){ document.getElementById('shopUI').style.display = 'none'; }
+function buy(name){
+  const it = SHOP.find(i=>i.name===name);
+  if(!it) return;
+  if(gold < it.price){ showDialog(['金幣不足']); return; }
+  gold -= it.price;
+  player.atk = it.atk;
+  showDialog([`購買成功：${it.name}`]);
+  closeShopUI();
+}
 
-// -------------------- 公會/任務 --------------------
+// -------------------- 公會 / 任務 --------------------
 const QUESTS = {
   E:{rank:'E',desc:'打倒3隻 史萊姆',target:'史萊姆',count:3,reward:{exp:30,gold:30}},
   D:{rank:'D',desc:'消滅5隻 哥布林',target:'哥布林',count:5,reward:{exp:60,gold:60}},
@@ -99,113 +165,184 @@ const QUESTS = {
   A:{rank:'A',desc:'淨化沼澤怨靈(3隻 鬼)',target:'鬼',count:3,reward:{exp:300,gold:350}},
   S:{rank:'S',desc:'挑戰地城 Boss',target:'深淵鬼王',count:1,reward:{exp:1000,gold:1000}}
 };
-let currentQuest=null, questProgress=0;
-function openGuildUI(){ let html='<h3>冒險者公會</h3>'; if(!player.isMember) html += '<div>你尚未註冊公會會員。<button onclick="registerGuild()">註冊會員</button></div>'; else { for(let k in QUESTS) html+=`<div>[${k}] ${QUESTS[k].desc} <button onclick="acceptQuest('${k}')">接受</button></div>` } html+='<br><button onclick="closeQuestUI()">關閉</button>'; document.getElementById('questUI').innerHTML=html; document.getElementById('questUI').style.display='block'; }
-function closeQuestUI(){ document.getElementById('questUI').style.display='none'; }
-function registerGuild(){ player.isMember=true; showDialog(['你已成為公會會員！']); openGuildUI(); }
-function acceptQuest(k){ currentQuest = QUESTS[k]; questProgress=0; document.getElementById('questText').innerText=currentQuest.desc; closeQuestUI(); showDialog(['任務接受：'+currentQuest.desc]); }
+let currentQuest = null, questProgress = 0;
+
+function openGuildUI(){
+  let html = '<h3>冒險者公會</h3>';
+  if(!player.isMember){
+    html += '<div>你尚未註冊公會會員。<button onclick="registerGuild()">註冊會員</button></div>';
+  } else {
+    for(let k in QUESTS){
+      html += `<div>[${k}] ${QUESTS[k].desc} <button onclick="acceptQuest('${k}')">接受</button></div>`;
+    }
+  }
+  html += '<br><button onclick="closeQuestUI()">關閉</button>';
+  document.getElementById('questUI').innerHTML = html;
+  document.getElementById('questUI').style.display = 'block';
+}
+function closeQuestUI(){ document.getElementById('questUI').style.display = 'none'; }
+function registerGuild(){ player.isMember = true; showDialog(['已成為公會會員！']); openGuildUI(); }
+function acceptQuest(k){ currentQuest = QUESTS[k]; questProgress = 0; document.getElementById('questText').innerText = currentQuest.desc; closeQuestUI(); showDialog(['任務接受：'+currentQuest.desc]); }
 
 // -------------------- 敵人被擊殺 --------------------
-function onEnemyDefeated(e){ gold += Math.floor(Math.random()*8)+5; player.exp += Math.floor(Math.random()*10)+8; // 任務檢查
- if(currentQuest && e.name.indexOf(currentQuest.target)!==-1){ questProgress++; if(questProgress>=currentQuest.count){ player.exp+=currentQuest.reward.exp; gold+=currentQuest.reward.gold; showDialog(['任務完成！ 獲得 '+currentQuest.reward.exp+' EXP / '+currentQuest.reward.gold+' G']); currentQuest=null; document.getElementById('questText').innerText='無'; } } // remove
- enemies = enemies.filter(x=>x!==e); }
+function onEnemyDefeated(e){
+  gold += Math.floor(Math.random()*8)+5;
+  player.exp += Math.floor(Math.random()*10)+8;
+  // 任務檢查（比對字串）
+  if(currentQuest && e.name.indexOf(currentQuest.target) !== -1){
+    questProgress++;
+    if(questProgress >= currentQuest.count){
+      player.exp += currentQuest.reward.exp;
+      gold += currentQuest.reward.gold;
+      showDialog([`任務完成！ 獲得 ${currentQuest.reward.exp} EXP / ${currentQuest.reward.gold} G`]);
+      currentQuest = null;
+      document.getElementById('questText').innerText = '無';
+    }
+  }
+  enemies = enemies.filter(x=>x !== e);
+}
 
 // -------------------- update / render --------------------
-function update(dt){ // movement
-  if(keys['w']) player.y -= player.speed; if(keys['s']) player.y += player.speed; if(keys['a']) player.x -= player.speed; if(keys['d']) player.x += player.speed;
+function update(dt){
+  // movement
+  if(keys['w']) player.y -= player.speed || 2;
+  if(keys['s']) player.y += player.speed || 2;
+  if(keys['a']) player.x -= player.speed || 2;
+  if(keys['d']) player.x += player.speed || 2;
   // clamp
-  player.x = Math.max(0,Math.min(canvas.width-player.w,player.x)); player.y = Math.max(0,Math.min(canvas.height-player.h,player.y));
+  player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
+  player.y = Math.max(0, Math.min(canvas.height - player.h, player.y));
   // mp regen
-  player.mp = Math.min(player.maxMp, player.mp + player.mpRegen);
-  // enemy AI: 慢慢靠近
-  enemies.forEach(e=>{ let dx=(player.x-e.x), dy=(player.y-e.y), d=Math.hypot(dx,dy); if(d>1){ e.x += (dx/d)*0.4; e.y += (dy/d)*0.4; } // attack if close
-    if(d<24){ player.hp -= e.atk*0.02; if(player.hp<0) player.hp=0; } if(e.hp<=0) onEnemyDefeated(e);
+  player.mp = Math.min(player.maxMp, player.mp + player.mpRegen * dt * 10);
+  // enemy AI
+  enemies.forEach(e=>{
+    const dx = player.x - e.x, dy = player.y - e.y;
+    const dist = Math.hypot(dx,dy);
+    if(dist > 1){
+      e.x += (dx/dist) * 0.4;
+      e.y += (dy/dist) * 0.4;
+    }
+    if(dist < 24){
+      player.hp -= e.atk * 0.02;
+      if(player.hp < 0) player.hp = 0;
+    }
+    if(e.hp <= 0) onEnemyDefeated(e);
   });
   // effects
-  effects.forEach(f=>f.t+=dt); effects = effects.filter(f=>f.t<1);
-  // level check
-  if(player.exp>=player.expNext){ player.exp-=player.expNext; player.lv++; player.expNext = Math.floor(player.expNext*1.6); player.maxHp+=10; player.hp=player.maxHp; player.atk+=2; }
+  effects.forEach(f=> f.t += dt);
+  effects = effects.filter(f => f.t < 1);
+  // level up
+  if(player.exp >= player.expNext){
+    player.exp -= player.expNext;
+    player.lv++;
+    player.expNext = Math.floor(player.expNext * 1.6);
+    player.maxHp += 10;
+    player.hp = player.maxHp;
+    player.atk += 2;
+  }
 }
 
-function render(){ ctx.fillStyle=currentArea.color; ctx.fillRect(0,0,canvas.width,canvas.height);
- // buildings
- if(currentArea.buildings){ currentArea.buildings.forEach(b=>{ // pixel style roof
-    ctx.fillStyle=b.c; ctx.fillRect(b.x,b.y,b.w,b.h); ctx.fillStyle='#000'; ctx.fillText(b.name,b.x+6,b.y+14);
- }); }
- // npcs
- if(currentArea.npcs){ currentArea.npcs.forEach(n=>{ ctx.fillStyle=n.c; ctx.fillRect(n.x,n.y,12,16); ctx.fillStyle='#fff'; ctx.fillText(n.name,n.x-6,n.y-6); }); }
- // player sprite (4-frame simple)
- const pf = Math.floor(Date.now()/150)%4; const colors = ['#fff','#fef','#ffd','#fff']; ctx.fillStyle = colors[pf]; ctx.fillRect(player.x,player.y,player.w,player.h);
- // enemies
- enemies.forEach(e=>{ ctx.fillStyle=e.c; ctx.fillRect(e.x,e.y,e.w,e.h); // hp bar
-    ctx.fillStyle='#000'; ctx.fillRect(e.x,e.y-6,e.w,4); ctx.fillStyle='#f33'; ctx.fillRect(e.x,e.y-6, e.w*(Math.max(0,e.hp)/e.maxHP),4); ctx.fillStyle='#fff'; ctx.fillText(e.name + (e.boss? ' (Boss)':'') , e.x-6,e.y-10);
- });
- // effects
- effects.forEach(f=>{ const alpha=1-f.t; ctx.globalAlpha=alpha; if(f.type==='fire'){ ctx.beginPath(); ctx.fillStyle='rgba(255,100,20,0.6)'; ctx.arc(f.x+10,f.y+10,50*f.t,0,Math.PI*2); ctx.fill(); } if(f.type==='wind'){ ctx.beginPath(); ctx.fillStyle='rgba(220,240,255,0.5)'; ctx.ellipse(f.x, f.y, 80*f.t,20*f.t,0,0,Math.PI*2); ctx.fill(); } ctx.globalAlpha=1; });
- // HUD text
- document.getElementById('hp').innerText = Math.round(player.hp)+'/'+player.maxHp; document.getElementById('mp').innerText = Math.round(player.mp)+'/'+player.maxMp; document.getElementById('atk').innerText=player.atk; document.getElementById('gold').innerText = gold; document.getElementById('exp').innerText = player.exp; document.getElementById('lv').innerText = player.lv;
+function render(){
+  ctx.fillStyle = currentArea.color;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // buildings
+  if(currentArea.buildings){
+    currentArea.buildings.forEach(b=>{
+      ctx.fillStyle = b.c; ctx.fillRect(b.x,b.y,b.w,b.h);
+      ctx.fillStyle = '#000'; ctx.fillText(b.name, b.x+6, b.y+14);
+    });
+  }
+
+  // npcs
+  if(currentArea.npcs){
+    currentArea.npcs.forEach(n=>{
+      ctx.fillStyle = n.c; ctx.fillRect(n.x, n.y, 12, 16);
+      ctx.fillStyle = '#fff'; ctx.fillText(n.name, n.x-6, n.y-6);
+    });
+  }
+
+  // player (simple 4-frame)
+  const pf = Math.floor(Date.now()/150) % 4;
+  const colors = ['#fff','#fef','#ffd','#fff'];
+  ctx.fillStyle = colors[pf]; ctx.fillRect(player.x, player.y, player.w, player.h);
+
+  // enemies
+  enemies.forEach(e=>{
+    ctx.fillStyle = e.c; ctx.fillRect(e.x, e.y, e.w, e.h);
+    ctx.fillStyle = '#000'; ctx.fillRect(e.x, e.y-6, e.w, 4);
+    ctx.fillStyle = '#f33'; ctx.fillRect(e.x, e.y-6, e.w * (Math.max(0,e.hp) / e.maxHP), 4);
+    ctx.fillStyle = '#fff'; ctx.fillText(e.name + (e.boss ? ' (Boss)' : ''), e.x-6, e.y-10);
+  });
+
+  // effects
+  effects.forEach(f=>{
+    const alpha = 1 - f.t;
+    ctx.globalAlpha = alpha;
+    if(f.type === 'fire'){ ctx.beginPath(); ctx.fillStyle = 'rgba(255,100,20,0.6)'; ctx.arc(f.x+10, f.y+10, 50 * f.t, 0, Math.PI*2); ctx.fill(); }
+    if(f.type === 'wind'){ ctx.beginPath(); ctx.fillStyle = 'rgba(220,240,255,0.5)'; ctx.ellipse(f.x, f.y, 80*f.t, 20*f.t, 0,0,Math.PI*2); ctx.fill(); }
+    ctx.globalAlpha = 1;
+  });
+
+  // HUD
+  document.getElementById('hp').innerText = Math.round(player.hp) + '/' + player.maxHp;
+  document.getElementById('mp').innerText = Math.round(player.mp) + '/' + player.maxMp;
+  document.getElementById('atk').innerText = player.atk;
+  document.getElementById('gold').innerText = gold;
+  document.getElementById('exp').innerText = player.exp;
+  document.getElementById('lv').innerText = player.lv;
 }
 
-let last=performance.now(); function loop(now){ const dt=(now-last)/1000; last=now; update(dt); render(); requestAnimationFrame(loop);} changeArea('village'); requestAnimationFrame(loop);
+// -------------------- loop --------------------
+let last = performance.now();
+function loop(now){
+  const dt = (now - last) / 1000; last = now;
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
 
 // -------------------- helpers --------------------
-function changeArea(k){ currentArea = AREAS[k]; spawnEnemies(currentArea); }
-function spawnEnemies(area){ spawnEnemies(area); } // placeholder overwritten below
+function changeArea(k){
+  currentArea = AREAS[k];
+  spawnEnemies(currentArea);
+}
 
-// replace spawnEnemies with proper
-window.spawnEnemies = spawnEnemies; // keep reference
+// -------------------- input / dialog / interaction --------------------
+window.addEventListener('keydown', e=>{
+  keys[e.key.toLowerCase()] = true;
+  if(e.key >= '1' && e.key <= '6') castSkill(Number(e.key));
+  if(e.key.toLowerCase() === 'e') interact();
+});
+window.addEventListener('keyup', e=>{ keys[e.key.toLowerCase()] = false; });
 
-// -------------------- input / interaction --------------------
-window.addEventListener('keydown',e=>{ keys[e.key.toLowerCase()] = true; if(e.key>='1' && e.key<='6') castSkill(Number(e.key)); if(e.key.toLowerCase()==='e') interact(); });
-window.addEventListener('keyup',e=>{ keys[e.key.toLowerCase()] = false; });
+let dialogQueue = [];
+function showDialog(lines){
+  dialogQueue = [...lines];
+  document.getElementById('dialogText').innerText = dialogQueue.shift();
+  document.getElementById('dialogBox').style.display = 'block';
+}
+function nextDialog(){
+  if(dialogQueue.length === 0){ document.getElementById('dialogBox').style.display = 'none'; return; }
+  document.getElementById('dialogText').innerText = dialogQueue.shift();
+}
 
-// interaction: talk to nearby npc
-let dialogQueue=[]; function showDialog(lines){ dialogQueue = lines; document.getElementById('dialogText').innerText = dialogQueue.shift(); document.getElementById('dialogBox').style.display='block'; }
-function nextDialog(){ if(dialogQueue.length===0){ document.getElementById('dialogBox').style.display='none'; return; } document.getElementById('dialogText').innerText = dialogQueue.shift(); }
+function interact(){
+  if(!currentArea.npcs) return;
+  for(let n of currentArea.npcs){
+    const d = Math.hypot(player.x - n.x, player.y - n.y);
+    if(d < 40){
+      if(n.role === 'shop'){ openShopUI(); return; }
+      if(n.role === 'guild'){ openGuildUI(); return; }
+      showDialog([n.name + ': 歡迎。']);
+      return;
+    }
+  }
+}
 
-function interact(){ if(!currentArea.npcs) return; for(let n of currentArea.npcs){ if(Math.hypot(player.x - n.x, player.y - n.y) < 36){ // shop / guild
-    if(n.role==='shop'){ openShopUI(); return; }
-    if(n.role==='guild'){ openGuildUI(); return; }
-    // else default talk
-    showDialog([n.name+': 你好，旅人。']); return; } } }
-
-// implement openShopUI/openGuildUI
-function openShopUI(){ let html='<h3>武器店</h3>'; SHOP.forEach(it=> html+=`<div>${it.name} ATK+${it.atk} ${it.price}G <button onclick="buy(\'${it.name}\')">買</button></div>`); html+='<br><button onclick="closeShopUI()">關閉</button>'; document.getElementById('shopUI').innerHTML=html; document.getElementById('shopUI').style.display='block'; }
-function closeShopUI(){ document.getElementById('shopUI').style.display='none'; }
-
-function openGuildUI(){ openGuildUI(); } // placeholder overwritten below
-
-// -------------------- implement missing functions properly --------------------
-// re-implement spawnEnemies to avoid recursion
-function spawnEnemies(areaKey){ enemies=[]; if(areaKey.key==='village'){ return; } let count = (areaKey.key==='dungeon')?8:6; for(let i=0;i<count;i++){ let m=MONS[Math.floor(Math.random()*MONS.length)]; enemies.push({x:Math.random()*(canvas.width-60)+30,y:Math.random()*(canvas.height-120)+40,w:22,h:22,name:m.name,hp:m.hp,maxHP:m.hp,atk:m.atk,c:m.c}); }
- if(areaKey.key==='dungeon' && Math.random()<0.6) enemies.push({x:Math.random()*(canvas.width-120)+60,y:100,w:48,h:48,name:BOSSES[0].name,hp:BOSSES[0].hp,maxHP:BOSSES[0].hp,atk:BOSSES[0].atk,c:BOSSES[0].c,boss:true}); }
-
-function openGuildUI(){ let html='<h3>冒險者公會</h3>'; if(!player.isMember){ html+='<div>您尚未註冊公會會員。<button onclick="registerGuild()">註冊</button></div>'; } else { for(let k in QUESTS) html+=`<div>[${k}] ${QUESTS[k].desc} <button onclick="acceptQuest('${k}')">接受</button></div>`; } html+='<br><button onclick="closeQuestUI()">關閉</button>'; document.getElementById('questUI').innerHTML=html; document.getElementById('questUI').style.display='block'; }
-function closeQuestUI(){ document.getElementById('questUI').style.display='none'; }
-function registerGuild(){ player.isMember=true; showDialog(['已成為公會會員！']); openGuildUI(); }
-function acceptQuest(k){ currentQuest = QUESTS[k]; questProgress=0; document.getElementById('questText').innerText = currentQuest.desc; closeQuestUI(); showDialog(['任務接受：'+currentQuest.desc]); }
-
-function buy(name){ const it = SHOP.find(i=>i.name===name); if(!it) return; if(gold<it.price){ showDialog(['金幣不足']); return;} gold-=it.price; player.atk = it.atk; showDialog(['購買成功：'+it.name]); closeShopUI(); }
-
-// small shop alias
-const SHOP = [ {name:'初級木劍',atk:2,price:20},{name:'青銅劍',atk:6,price:80},{name:'鐵劍',atk:12,price:200},{name:'勇者之刃',atk:28,price:600} ];
-
-// castSkill wrapper
-function castSkill(i){ castSkill(i); } // overwritten below
-// avoid recursion by defining proper function now
-function castSkill(i){ const s = SKILLS[i]; if(!s) return; if(player.mp < s.mp){ showDialog(['MP不足：'+s.name]); return; } player.mp -= s.mp; // aoe
- enemies.forEach(e=>{ let dx=(e.x+e.w/2)-(player.x+player.w/2), dy=(e.y+e.h/2)-(player.y+player.h/2), d=Math.hypot(dx,dy); if(d<160){ e.hp -= s.dmg; if(e.hp<=0) onEnemyDefeated(e); } }); spawnEffect(s.fx,player.x,player.y); }
-
-// adjust interact and openShopUI now to proper functions defined
-function interact(){ if(!currentArea.npcs) return; for(let n of currentArea.npcs){ if(Math.hypot(player.x-n.x,player.y-n.y) < 40){ if(n.role==='shop'){ openShopUI(); return; } if(n.role==='guild'){ openGuildUI(); return; } showDialog([n.name+': 歡迎。']); return; } } }
-
-// event listeners for keyboard
-window.addEventListener('keydown',e=>{ keys[e.key.toLowerCase()] = true; if(e.key>='1' && e.key<='6'){ castSkill(Number(e.key)); } if(e.key.toLowerCase()==='e'){ interact(); } });
-window.addEventListener('keyup',e=>{ keys[e.key.toLowerCase()] = false; });
-
-// init spawn
-spawnEnemies(currentArea);
-
+// -------------------- start --------------------
+changeArea('village');
+requestAnimationFrame(loop);
 </script>
 </body>
 </html>
