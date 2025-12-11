@@ -346,6 +346,49 @@ if(window.regionData){
   if(regionData.desert) regionData.desert.monsters = ['Lizard','Orc','Ghost'];
   if(regionData.swamp)  regionData.swamp.monsters  = ['Slime','Goblin','Ghost'];
 }
+// --- Improved Hotfix: full restore movement + NPC + enemy chase ---
+
+// Force proper player movement handler
+function restorePlayerMovement(){
+  if(!player) return;
+  player.canMove = true;
+  if(!player.speed) player.speed = 150;
+  if(!player.keys) player.keys = {};
+}
+setInterval(restorePlayerMovement,200);
+
+// Reinstall keyboard listeners (overwrite broken ones)
+window.onkeydown = e=>{ if(player){ player.keys[e.key] = true; }};
+window.onkeyup   = e=>{ if(player){ player.keys[e.key] = false; }};
+
+// Enemy AI: chase player instead of random wandering
+if(typeof updateEnemies === 'function'){
+  const _oldUpdateEnemies = updateEnemies;
+  updateEnemies = function(dt){
+    enemies.forEach(e=>{
+      const dx = player.x - e.x;
+      const dy = player.y - e.y;
+      const d  = Math.hypot(dx,dy);
+      if(d < 500){ // chase distance
+        e.vx = dx/d * 40;
+        e.vy = dy/d * 40;
+      }
+      e.x += e.vx * dt;
+      e.y += e.vy * dt;
+    });
+    _oldUpdateEnemies(dt);
+  }
+}
+
+// Add NPC back to village
+if(window.regionData && regionData.village){
+  regionData.village.npcs = [
+    {name:"村長", x:100, y:100, dialog:"勇者啊，世界需要你！"},
+    {name:"旅店老闆", x:160, y:100, dialog:"要休息一下嗎？"},
+    {name:"鐵匠", x:220, y:100, dialog:"需要打造裝備？"}
+  ];
+}
+
 // --- End Hotfix ---
 </script>
 </body>
