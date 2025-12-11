@@ -4,18 +4,127 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>我的音樂網頁</title>
-    <link rel="stylesheet" href="style.css">
+
+    <!-- 內嵌 CSS：美化、動畫、RWD -->
+    <style>
+        body {
+            margin: 0;
+            font-family: "Noto Sans TC", sans-serif;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+        }
+
+        .content-container {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            text-align: center;
+            width: 90%;
+            max-width: 400px;
+            animation: fadeIn 1.2s ease;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            animation: slideDown 1s ease;
+        }
+
+        audio {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        /* 播放清單 */
+        .playlist {
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .playlist-item {
+            padding: 10px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .playlist-item:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .playing {
+            background: rgba(0, 0, 0, 0.4);
+        }
+
+        /* 動畫 */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        @keyframes slideDown {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        @media (max-width: 500px) {
+            .content-container {
+                padding: 30px;
+            }
+        }
+    </style>
 </head>
 <body>
 
     <div class="content-container">
-        <h1>歡迎來到我的音樂空間</h1>
-        <!-- 在這裡放入您的音訊播放器 -->
-        <audio controls>
-            <source src="my_song.mp3" type="audio/mpeg">
+        <h1>歡迎來到我的音樂空間 🎧</h1>
+
+        <!-- 你的原本播放器 + 自動播放/循環 -->
+        <audio id="player" controls autoplay loop>
+            <source id="audioSource" src="my_song.mp3" type="audio/mpeg">
             您的瀏覽器不支援音訊元素。
         </audio>
+
+        <!-- 播放清單（新增的功能） -->
+        <div class="playlist" id="playlist">
+            <div class="playlist-item playing" data-src="my_song.mp3">🎵 我的音樂 1</div>
+            <div class="playlist-item" data-src="song2.mp3">🎵 我的音樂 2</div>
+            <div class="playlist-item" data-src="song3.mp3">🎵 我的音樂 3</div>
+        </div>
     </div>
+
+    <!-- 內嵌 JS：播放清單 + 自動切換 -->
+    <script>
+        const player = document.getElementById("player");
+        const playlistItems = document.querySelectorAll(".playlist-item");
+
+        playlistItems.forEach(item => {
+            item.addEventListener("click", function () {
+                const src = this.getAttribute("data-src");
+                document.getElementById("audioSource").src = src;
+
+                player.load();
+                player.play();
+
+                playlistItems.forEach(i => i.classList.remove("playing"));
+                this.classList.add("playing");
+            });
+        });
+
+        player.addEventListener("ended", () => {
+            let current = [...playlistItems].findIndex(i => i.classList.contains("playing"));
+            let next = (current + 1) % playlistItems.length;
+
+            playlistItems[next].click();
+        });
+    </script>
 
 </body>
 </html>
+
+
+
