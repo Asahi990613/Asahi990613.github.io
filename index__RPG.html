@@ -2,14 +2,15 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<title>Pixel RPG Interior System</title>
+<title>Pixel RPG Full System</title>
 <style>
 body{margin:0;background:#070707;color:#fff;font-family:monospace}
 canvas{display:block;margin:0 auto;background:#000;image-rendering:pixelated}
-#ui{position:fixed;left:10px;top:10px}
+#ui{position:fixed;left:10px;top:10px;font-size:14px}
 #panel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
-background:#111;padding:12px;border-radius:8px;display:none}
-button{cursor:pointer}
+background:#111;padding:12px;border-radius:8px;display:none;min-width:300px}
+#bottom{position:fixed;left:0;bottom:0;width:100%;background:#111;padding:6px;text-align:center}
+button{margin:3px}
 </style>
 </head>
 <body>
@@ -18,80 +19,58 @@ button{cursor:pointer}
 
 <div id="ui">
 HP:<span id="hp"></span>
-MP:<span id="mp"></span>
-ATK:<span id="atk"></span><br>
-Gold:<span id="gold"></span>
-LV:<span id="lv"></span><br>
+MP:<span id="mp"></span><br>
+ATK:<span id="atk"></span>
+DEF:<span id="def"></span>
+SPD:<span id="spd"></span><br>
+Gold:<span id="gold"></span><br>
 Quest:<span id="questText">無</span>
 </div>
 
 <div id="panel"></div>
 
-<script>
-const c=document.getElementById("game");
-const ctx=c.getContext("2d");
-let keys={};
+<div id="bottom">
+WASD移動｜Space普攻｜1~3技能｜E互動｜Z包包
+</div>
 
-// ================= 玩家 =================
+<script>
+/* ================= 基本 ================= */
+const c=game,ctx=c.getContext("2d");
+let keys={},scene="village";
+const SAVE_KEY="pixelRPG_full";
+
+/* ================= 玩家 ================= */
 const player={
  x:480,y:360,w:20,h:28,
  hp:120,maxHp:120,
  mp:60,maxMp:60,
- atk:8,lv:1,exp:0,
- speed:2
+ atk:5,def:0,speed:2,lv:1
 };
 let gold=50;
 
-// ================= 地圖狀態 =================
-let scene="village"; // village / guildInterior / forest
+/* ================= 裝備 & 包包 ================= */
+const inventory=[];
+const equipment={weapon:null,armor:null,boots:null};
 
-// ================= 任務 =================
-const QUESTS=[
- {name:"清除史萊姆",target:"史萊姆",count:3,reward:{gold:30,exp:20}},
- {name:"討伐哥布林",target:"哥布林",count:4,reward:{gold:50,exp:40}},
- {name:"擊殺蜥人",target:"蜥人",count:3,reward:{gold:80,exp:70}}
-];
-let currentQuest=null,progress=0,completed=false;
+const ITEMS={
+ sword:{name:"鐵劍",type:"weapon",atk:5},
+ armor:{name:"皮甲",type:"armor",def:3},
+ boots:{name:"皮靴",type:"boots",speed:1}
+};
 
-// ================= 怪物 =================
+/* ================= 怪物 ================= */
 let enemies=[];
 function spawnEnemies(){
  enemies=[];
  if(scene==="forest"){
   enemies.push(
-   {name:"史萊姆",lv:1,hp:20,maxHp:20,atk:2,x:200,y:200,c:"#5af"},
-   {name:"哥布林",lv:2,hp:35,maxHp:35,atk:4,x:350,y:250,c:"#6a4"},
-   {name:"蜥人",lv:3,hp:50,maxHp:50,atk:6,x:500,y:220,c:"#3a8"}
+   {name:"史萊姆",lv:1,hp:30,maxHp:30,atk:2,x:200,y:250},
+   {name:"哥布林",lv:2,hp:50,maxHp:50,atk:4,x:420,y:260}
   );
  }
 }
 
-// ================= 技能 =================
-const SKILLS={
- 1:{name:"火焰斬",mp:10,dmg:30,color:"orange"},
- 2:{name:"雷擊",mp:15,dmg:45,color:"yellow"},
- 3:{name:"聖光",mp:20,dmg:65,color:"white"}
-};
-let effects=[];
-
-// ================= 繪製 =================
-function drawVillage(){
- ctx.fillStyle="#bda78a";ctx.fillRect(0,0,c.width,c.height);
- // 公會外觀
- ctx.fillStyle="#555";ctx.fillRect(300,150,260,200);
- ctx.fillStyle="#222";ctx.fillRect(410,300,40,50); // door
- ctx.fillText("冒險者公會",360,145);
-}
-function drawGuildInterior(){
- ctx.fillStyle="#2b2b3d";ctx.fillRect(0,0,c.width,c.height);
- // counter
- ctx.fillStyle="#444";ctx.fillRect(300,220,360,60);
- ctx.fillStyle="#ccc";ctx.fillRect(440,180,20,40); // npc
- ctx.fillText("公會櫃檯",430,170);
-}
-function drawForest(){
- ctx.fillStyle="#103814";ctx.fillRect(0,0,c.width,c.height);
-}
+/* ================= 畫面 ================= */
 function drawPlayer(){
  ctx.fillStyle="#f2c9ac";ctx.fillRect(player.x+6,player.y,8,8);
  ctx.fillStyle="#3a6ee8";ctx.fillRect(player.x+4,player.y+8,12,10);
@@ -100,69 +79,93 @@ function drawPlayer(){
  ctx.fillRect(player.x+12,player.y+18,4,8);
 }
 
-// ================= 戰鬥 =================
+/* ================= 戰鬥 ================= */
 function attack(){
  enemies.forEach(e=>{
   if(Math.hypot(player.x-e.x,player.y-e.y)<40){
-   e.hp-=player.atk;
-   effects.push({type:"slash",x:e.x,y:e.y,t:0});
-   if(e.hp<=0)kill(e);
-  }
- });
-}
-function cast(i){
- const s=SKILLS[i];
- if(!s||player.mp<s.mp)return;
- player.mp-=s.mp;
- enemies.forEach(e=>{
-  if(Math.hypot(player.x-e.x,player.y-e.y)<120){
-   e.hp-=s.dmg;
-   effects.push({type:s.name,x:e.x,y:e.y,t:0});
+   e.hp-=Math.max(1,player.atk-e.atk*0.2);
    if(e.hp<=0)kill(e);
   }
  });
 }
 function kill(e){
- if(currentQuest && e.name===currentQuest.target){
-  progress++;
-  if(progress>=currentQuest.count){
-   completed=true;
-   questText.innerText="任務完成";
-  }
- }
- gold+=10;
+ gold+=Math.floor(Math.random()*11)+5;
  enemies=enemies.filter(x=>x!==e);
+ save();
 }
 
-// ================= 任務 UI =================
-function openGuildUI(){
- let html="<h3>公會任務</h3>";
- QUESTS.forEach((q,i)=>{
-  html+=`${q.name} <button onclick="accept(${i})">接受</button><br>`;
- });
- if(completed){
-  html+=`<button onclick="claim()">領取報酬</button>`;
- }
- html+=`<br><button onclick="closePanel()">關閉</button>`;
- panel.innerHTML=html;
+/* ================= 商店 ================= */
+function openShop(){
+ panel.innerHTML=`
+ <h3>商店</h3>
+ <b>藥水商人</b><br>
+ <button onclick="buyPotion('hp')">HP藥水 10G</button>
+ <button onclick="buyPotion('mp')">MP藥水 10G</button><br><br>
+ <b>武器商人</b><br>
+ <button onclick="buyItem('sword',30)">鐵劍 30G</button>
+ <button onclick="buyItem('armor',25)">皮甲 25G</button>
+ <button onclick="buyItem('boots',20)">皮靴 20G</button><br>
+ <button onclick="closePanel()">關閉</button>`;
  panel.style.display="block";
 }
-function accept(i){
- currentQuest=QUESTS[i];
- progress=0;completed=false;
- questText.innerText=currentQuest.name;
- closePanel();
+function buyPotion(t){
+ if(gold<10)return;
+ gold-=10;
+ if(t==="hp")player.hp=Math.min(player.maxHp,player.hp+40);
+ if(t==="mp")player.mp=Math.min(player.maxMp,player.mp+30);
+ save();
 }
-function claim(){
- gold+=currentQuest.reward.gold;
- player.exp+=currentQuest.reward.exp;
- currentQuest=null;completed=false;
- questText.innerText="無";
- closePanel();
+function buyItem(id,price){
+ if(gold<price)return;
+ gold-=price;
+ inventory.push({...ITEMS[id]});
+ save();
 }
-function closePanel(){panel.style.display="none";}
 
-// ================= 更新 =================
+/* ================= 包包 ================= */
+function openBag(){
+ let h="<h3>包包</h3>";
+ inventory.forEach((it,i)=>{
+  h+=`${it.name}
+  <button onclick="equip(${i})">裝備</button><br>`;
+ });
+ h+="<button onclick='closePanel()'>關閉</button>";
+ panel.innerHTML=h;
+ panel.style.display="block";
+}
+function equip(i){
+ const it=inventory[i];
+ if(it.type==="weapon")equipment.weapon=it;
+ if(it.type==="armor")equipment.armor=it;
+ if(it.type==="boots")equipment.boots=it;
+ recalcStats();
+ save();
+}
+
+/* ================= 數值 ================= */
+function recalcStats(){
+ player.atk=5+(equipment.weapon?.atk||0);
+ player.def=(equipment.armor?.def||0);
+ player.speed=2+(equipment.boots?.speed||0);
+}
+
+/* ================= 存檔 ================= */
+function save(){
+ localStorage.setItem(SAVE_KEY,JSON.stringify({
+  player, gold, inventory, equipment
+ }));
+}
+function load(){
+ const s=JSON.parse(localStorage.getItem(SAVE_KEY));
+ if(!s)return;
+ Object.assign(player,s.player);
+ gold=s.gold;
+ inventory.push(...s.inventory);
+ Object.assign(equipment,s.equipment);
+ recalcStats();
+}
+
+/* ================= 更新 ================= */
 function update(){
  if(keys.w)player.y-=player.speed;
  if(keys.s)player.y+=player.speed;
@@ -171,79 +174,48 @@ function update(){
 
  enemies.forEach(e=>{
   if(Math.hypot(player.x-e.x,player.y-e.y)<24){
-   player.hp-=e.atk*0.05;
+   player.hp=Math.max(0,player.hp-(e.atk-player.def)*0.05);
   }
  });
- player.hp=Math.max(0,player.hp);
-
- effects.forEach(f=>f.t+=0.1);
- effects=effects.filter(f=>f.t<1);
 }
 
-// ================= 繪製 =================
+/* ================= 繪製 ================= */
 function render(){
- if(scene==="village")drawVillage();
- if(scene==="guildInterior")drawGuildInterior();
- if(scene==="forest")drawForest();
+ ctx.fillStyle=scene==="forest"?"#103814":"#bda78a";
+ ctx.fillRect(0,0,960,540);
 
  drawPlayer();
 
  enemies.forEach(e=>{
-  ctx.fillStyle=e.c;ctx.fillRect(e.x,e.y,22,22);
+  ctx.fillStyle="#6a4";ctx.fillRect(e.x,e.y,22,22);
   ctx.fillStyle="#f33";
   ctx.fillRect(e.x,e.y-6,22*(e.hp/e.maxHp),4);
   ctx.fillStyle="#fff";
   ctx.fillText(`${e.name} Lv${e.lv}`,e.x-10,e.y-10);
  });
 
- effects.forEach(f=>{
-  ctx.globalAlpha=1-f.t;
-  ctx.fillStyle=f.type==="slash"?"#fff":"orange";
-  ctx.beginPath();
-  ctx.arc(f.x+10,f.y+10,40*f.t,0,Math.PI*2);
-  ctx.fill();
-  ctx.globalAlpha=1;
- });
-
  hp.innerText=Math.round(player.hp);
  mp.innerText=Math.round(player.mp);
  atk.innerText=player.atk;
+ def.innerText=player.def;
+ spd.innerText=player.speed;
  gold.innerText=gold;
- lv.innerText=player.lv;
 }
 
-// ================= 互動 =================
-function interact(){
- if(scene==="village"){
-  if(Math.hypot(player.x-430,player.y-320)<40){
-   scene="guildInterior";
-   player.x=460;player.y=400;
-  }
- }
- else if(scene==="guildInterior"){
-  if(Math.hypot(player.x-450,player.y-200)<40){
-   openGuildUI();
-  }
-  if(player.y>500){
-   scene="village";
-   player.x=420;player.y=360;
-  }
- }
-}
-
-// ================= 控制 =================
+/* ================= 控制 ================= */
 window.addEventListener("keydown",e=>{
  keys[e.key]=true;
  if(e.key===" ")attack();
- if(e.key>="1"&&e.key<="3")cast(Number(e.key));
- if(e.key==="e")interact();
+ if(e.key==="z")openBag();
+ if(e.key==="e"&&scene==="village")openShop();
 });
 window.addEventListener("keyup",e=>keys[e.key]=false);
 
-// ================= 主迴圈 =================
-function loop(){update();render();requestAnimationFrame(loop);}
+/* ================= 主迴圈 ================= */
+load();
+setInterval(save,5000);
 spawnEnemies();
-loop();
+(function loop(){update();render();requestAnimationFrame(loop);})();
 </script>
 </body>
 </html>
