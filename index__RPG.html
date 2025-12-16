@@ -2,15 +2,14 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<title>Pixel RPG - Final Complete</title>
+<title>Pixel RPG Interior System</title>
 <style>
 body{margin:0;background:#070707;color:#fff;font-family:monospace}
 canvas{display:block;margin:0 auto;background:#000;image-rendering:pixelated}
 #ui{position:fixed;left:10px;top:10px}
-#menu{position:fixed;right:10px;top:10px;background:#111;padding:8px}
-.panel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+#panel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
 background:#111;padding:12px;border-radius:8px;display:none}
-button{cursor:pointer;margin:2px}
+button{cursor:pointer}
 </style>
 </head>
 <body>
@@ -21,113 +20,84 @@ button{cursor:pointer;margin:2px}
 HP:<span id="hp"></span>
 MP:<span id="mp"></span>
 ATK:<span id="atk"></span><br>
-LV:<span id="lv"></span>
-Gold:<span id="gold"></span><br>
+Gold:<span id="gold"></span>
+LV:<span id="lv"></span><br>
 Quest:<span id="questText">無</span>
 </div>
 
-<div id="menu">
-<button onclick="changeArea('village')">村莊</button>
-<button onclick="changeArea('forest')">森林</button>
-<button onclick="changeArea('dungeon')">地城</button>
-</div>
-
-<div id="dialog" class="panel"></div>
-<div id="shop" class="panel"></div>
-<div id="guild" class="panel"></div>
+<div id="panel"></div>
 
 <script>
-// ================= 基本 =================
-const c = document.getElementById("game");
-const ctx = c.getContext("2d");
+const c=document.getElementById("game");
+const ctx=c.getContext("2d");
 let keys={};
 
 // ================= 玩家 =================
-let player={
- x:460,y:280,w:20,h:28,
+const player={
+ x:480,y:360,w:20,h:28,
  hp:120,maxHp:120,
  mp:60,maxMp:60,
- atk:8,lv:1,exp:0,expNext:100,
- speed:2,isDead:false,
- weapon:"木劍"
+ atk:8,lv:1,exp:0,
+ speed:2
 };
 let gold=50;
 
-// ================= 存檔 =================
-function save(){
- localStorage.setItem("rpgSave",JSON.stringify({player,gold}));
-}
-function load(){
- const s=localStorage.getItem("rpgSave");
- if(s){({player,gold}=JSON.parse(s));}
-}
-load();
-
-// ================= 技能 =================
-const SKILLS={
- 1:{name:"火焰斬",mp:10,dmg:35,color:"orange"},
- 2:{name:"雷霆擊",mp:15,dmg:55,color:"yellow"},
- 3:{name:"聖光裁決",mp:20,dmg:80,color:"white"}
-};
-let effects=[];
-
-// ================= 地圖 =================
-const AREAS={
- village:{
-  color:"#bda78a",
-  buildings:[
-   {x:60,y:150,w:200,h:160,type:"shop"},
-   {x:340,y:120,w:260,h:200,type:"guild"}
-  ],
-  npcs:[
-   {x:160,y:300,role:"shop",name:"武器商"},
-   {x:460,y:330,role:"guild",name:"公會接待"}
-  ]
- },
- forest:{color:"#103814"},
- dungeon:{color:"#2b2b2b"}
-};
-let area="village";
+// ================= 地圖狀態 =================
+let scene="village"; // village / guildInterior / forest
 
 // ================= 任務 =================
-const QUESTS={
- E:{desc:"擊倒3隻史萊姆",target:"史萊姆",count:3,reward:{gold:30,exp:30}},
- S:{desc:"擊敗地城Boss",target:"深淵鬼王",count:1,reward:{gold:300,exp:300}}
-};
-let quest=null,progress=0,done=false;
+const QUESTS=[
+ {name:"清除史萊姆",target:"史萊姆",count:3,reward:{gold:30,exp:20}},
+ {name:"討伐哥布林",target:"哥布林",count:4,reward:{gold:50,exp:40}},
+ {name:"擊殺蜥人",target:"蜥人",count:3,reward:{gold:80,exp:70}}
+];
+let currentQuest=null,progress=0,completed=false;
 
-// ================= 敵人 =================
+// ================= 怪物 =================
 let enemies=[];
 function spawnEnemies(){
  enemies=[];
- if(area==="forest"){
-  for(let i=0;i<5;i++)enemies.push({x:Math.random()*800+50,y:100,
-   w:22,h:22,name:"史萊姆",hp:20,maxHp:20,atk:2,c:"#5af"});
- }
- if(area==="dungeon"){
-  enemies.push({x:450,y:140,w:48,h:48,name:"深淵鬼王",
-   hp:300,maxHp:300,atk:15,c:"#b22",boss:true});
+ if(scene==="forest"){
+  enemies.push(
+   {name:"史萊姆",lv:1,hp:20,maxHp:20,atk:2,x:200,y:200,c:"#5af"},
+   {name:"哥布林",lv:2,hp:35,maxHp:35,atk:4,x:350,y:250,c:"#6a4"},
+   {name:"蜥人",lv:3,hp:50,maxHp:50,atk:6,x:500,y:220,c:"#3a8"}
+  );
  }
 }
 
-// ================= 畫圖 =================
-function drawBuildings(){
- AREAS.village.buildings.forEach(b=>{
-  ctx.fillStyle=b.type==="shop"?"#8b5a2b":"#555";
-  ctx.fillRect(b.x,b.y,b.w,b.h);
-  ctx.fillStyle="#333";
-  ctx.fillRect(b.x+20,b.y-30,b.w-40,30);
-  ctx.fillStyle="#222";
-  ctx.fillRect(b.x+b.w/2-15,b.y+b.h-40,30,40);
- });
+// ================= 技能 =================
+const SKILLS={
+ 1:{name:"火焰斬",mp:10,dmg:30,color:"orange"},
+ 2:{name:"雷擊",mp:15,dmg:45,color:"yellow"},
+ 3:{name:"聖光",mp:20,dmg:65,color:"white"}
+};
+let effects=[];
+
+// ================= 繪製 =================
+function drawVillage(){
+ ctx.fillStyle="#bda78a";ctx.fillRect(0,0,c.width,c.height);
+ // 公會外觀
+ ctx.fillStyle="#555";ctx.fillRect(300,150,260,200);
+ ctx.fillStyle="#222";ctx.fillRect(410,300,40,50); // door
+ ctx.fillText("冒險者公會",360,145);
+}
+function drawGuildInterior(){
+ ctx.fillStyle="#2b2b3d";ctx.fillRect(0,0,c.width,c.height);
+ // counter
+ ctx.fillStyle="#444";ctx.fillRect(300,220,360,60);
+ ctx.fillStyle="#ccc";ctx.fillRect(440,180,20,40); // npc
+ ctx.fillText("公會櫃檯",430,170);
+}
+function drawForest(){
+ ctx.fillStyle="#103814";ctx.fillRect(0,0,c.width,c.height);
 }
 function drawPlayer(){
- const x=player.x,y=player.y;
- ctx.fillStyle="#f2c9ac"; ctx.fillRect(x+6,y,8,8);
- ctx.fillStyle="#3a6ee8"; ctx.fillRect(x+4,y+8,12,10);
+ ctx.fillStyle="#f2c9ac";ctx.fillRect(player.x+6,player.y,8,8);
+ ctx.fillStyle="#3a6ee8";ctx.fillRect(player.x+4,player.y+8,12,10);
  ctx.fillStyle="#222";
- ctx.fillRect(x+4,y+18,4,8); ctx.fillRect(x+12,y+18,4,8);
- ctx.fillStyle="#aaa"; ctx.fillRect(x+16,y+10,12,2);
+ ctx.fillRect(player.x+4,player.y+18,4,8);
+ ctx.fillRect(player.x+12,player.y+18,4,8);
 }
 
 // ================= 戰鬥 =================
@@ -135,6 +105,7 @@ function attack(){
  enemies.forEach(e=>{
   if(Math.hypot(player.x-e.x,player.y-e.y)<40){
    e.hp-=player.atk;
+   effects.push({type:"slash",x:e.x,y:e.y,t:0});
    if(e.hp<=0)kill(e);
   }
  });
@@ -144,64 +115,55 @@ function cast(i){
  if(!s||player.mp<s.mp)return;
  player.mp-=s.mp;
  enemies.forEach(e=>{
-  if(Math.hypot(player.x-e.x,player.y-e.y)<140){
+  if(Math.hypot(player.x-e.x,player.y-e.y)<120){
    e.hp-=s.dmg;
+   effects.push({type:s.name,x:e.x,y:e.y,t:0});
    if(e.hp<=0)kill(e);
   }
  });
- effects.push({x:player.x,y:player.y,c:s.color,t:0});
 }
 function kill(e){
- if(quest && e.name===quest.target && !done){
+ if(currentQuest && e.name===currentQuest.target){
   progress++;
-  if(progress>=quest.count){done=true;questText.innerText="任務完成";}
+  if(progress>=currentQuest.count){
+   completed=true;
+   questText.innerText="任務完成";
+  }
  }
- gold+=10;player.exp+=10;
+ gold+=10;
  enemies=enemies.filter(x=>x!==e);
 }
 
-// ================= UI =================
-function openShop(){
- shop.style.display="block";
- shop.innerHTML=`<h3>武器店</h3>
- 木劍 ATK+0<br>
- 鐵劍 ATK+5 <button onclick="buy()">購買</button><br>
- <button onclick="shop.style.display='none'">離開</button>`;
-}
-function buy(){
- if(gold<50)return;
- gold-=50;player.atk+=5;player.weapon="鐵劍";
- save();
-}
-function openGuild(){
- guild.style.display="block";
- let html="<h3>冒險者公會</h3>";
- if(!quest){
-  html+=`<button onclick="accept()">接受任務</button>`;
+// ================= 任務 UI =================
+function openGuildUI(){
+ let html="<h3>公會任務</h3>";
+ QUESTS.forEach((q,i)=>{
+  html+=`${q.name} <button onclick="accept(${i})">接受</button><br>`;
+ });
+ if(completed){
+  html+=`<button onclick="claim()">領取報酬</button>`;
  }
- if(done){
-  html+=`<button onclick="reward()">領取報酬</button>`;
- }
- html+=`<br><button onclick="guild.style.display='none'">離開</button>`;
- guild.innerHTML=html;
+ html+=`<br><button onclick="closePanel()">關閉</button>`;
+ panel.innerHTML=html;
+ panel.style.display="block";
 }
-function accept(){
- quest=QUESTS.E;progress=0;done=false;
- questText.innerText=quest.desc;
- guild.style.display="none";
+function accept(i){
+ currentQuest=QUESTS[i];
+ progress=0;completed=false;
+ questText.innerText=currentQuest.name;
+ closePanel();
 }
-function reward(){
- gold+=quest.reward.gold;
- player.exp+=quest.reward.exp;
- quest=null;done=false;
+function claim(){
+ gold+=currentQuest.reward.gold;
+ player.exp+=currentQuest.reward.exp;
+ currentQuest=null;completed=false;
  questText.innerText="無";
- guild.style.display="none";
- save();
+ closePanel();
 }
+function closePanel(){panel.style.display="none";}
 
 // ================= 更新 =================
 function update(){
- if(player.isDead)return;
  if(keys.w)player.y-=player.speed;
  if(keys.s)player.y+=player.speed;
  if(keys.a)player.x-=player.speed;
@@ -213,51 +175,60 @@ function update(){
   }
  });
  player.hp=Math.max(0,player.hp);
- if(player.hp<=0){
-  player.isDead=true;
-  alert("你死了，回村莊");
-  changeArea("village");
-  player.hp=player.maxHp;
-  player.isDead=false;
- }
- effects.forEach(f=>f.t+=0.05);
+
+ effects.forEach(f=>f.t+=0.1);
  effects=effects.filter(f=>f.t<1);
 }
 
 // ================= 繪製 =================
 function render(){
- ctx.fillStyle=AREAS[area].color;
- ctx.fillRect(0,0,c.width,c.height);
- if(area==="village")drawBuildings();
+ if(scene==="village")drawVillage();
+ if(scene==="guildInterior")drawGuildInterior();
+ if(scene==="forest")drawForest();
+
  drawPlayer();
+
  enemies.forEach(e=>{
-  ctx.fillStyle=e.c;ctx.fillRect(e.x,e.y,e.w,e.h);
+  ctx.fillStyle=e.c;ctx.fillRect(e.x,e.y,22,22);
+  ctx.fillStyle="#f33";
+  ctx.fillRect(e.x,e.y-6,22*(e.hp/e.maxHp),4);
+  ctx.fillStyle="#fff";
+  ctx.fillText(`${e.name} Lv${e.lv}`,e.x-10,e.y-10);
  });
+
  effects.forEach(f=>{
   ctx.globalAlpha=1-f.t;
-  ctx.fillStyle=f.c;
+  ctx.fillStyle=f.type==="slash"?"#fff":"orange";
   ctx.beginPath();
-  ctx.arc(f.x+10,f.y+10,100*f.t,0,Math.PI*2);
+  ctx.arc(f.x+10,f.y+10,40*f.t,0,Math.PI*2);
   ctx.fill();
   ctx.globalAlpha=1;
  });
 
- hp.innerText=Math.round(player.hp)+"/"+player.maxHp;
- mp.innerText=Math.round(player.mp)+"/"+player.maxMp;
+ hp.innerText=Math.round(player.hp);
+ mp.innerText=Math.round(player.mp);
  atk.innerText=player.atk;
- lv.innerText=player.lv;
  gold.innerText=gold;
+ lv.innerText=player.lv;
 }
 
 // ================= 互動 =================
 function interact(){
- if(area!=="village")return;
- AREAS.village.npcs.forEach(n=>{
-  if(Math.hypot(player.x-n.x,player.y-n.y)<40){
-   if(n.role==="shop")openShop();
-   if(n.role==="guild")openGuild();
+ if(scene==="village"){
+  if(Math.hypot(player.x-430,player.y-320)<40){
+   scene="guildInterior";
+   player.x=460;player.y=400;
   }
- });
+ }
+ else if(scene==="guildInterior"){
+  if(Math.hypot(player.x-450,player.y-200)<40){
+   openGuildUI();
+  }
+  if(player.y>500){
+   scene="village";
+   player.x=420;player.y=360;
+  }
+ }
 }
 
 // ================= 控制 =================
@@ -271,8 +242,7 @@ window.addEventListener("keyup",e=>keys[e.key]=false);
 
 // ================= 主迴圈 =================
 function loop(){update();render();requestAnimationFrame(loop);}
-changeArea("village");
-function changeArea(a){area=a;spawnEnemies();}
+spawnEnemies();
 loop();
 </script>
 </body>
