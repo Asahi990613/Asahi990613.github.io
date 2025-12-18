@@ -2,15 +2,12 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<title>Pixel RPG Full System</title>
+<title>Pixel RPG Stable</title>
 <style>
-body{margin:0;background:#070707;color:#fff;font-family:monospace}
-canvas{display:block;margin:0 auto;background:#000;image-rendering:pixelated}
-#ui{position:fixed;left:10px;top:10px;font-size:14px}
-#panel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
-background:#111;padding:12px;border-radius:8px;display:none;min-width:300px}
-#bottom{position:fixed;left:0;bottom:0;width:100%;background:#111;padding:6px;text-align:center}
-button{margin:3px}
+body{margin:0;background:#000;color:#fff;font-family:monospace}
+canvas{display:block;margin:0 auto;background:#111;image-rendering:pixelated}
+#ui{position:fixed;left:10px;top:10px}
+#hint{position:fixed;bottom:10px;width:100%;text-align:center}
 </style>
 </head>
 <body>
@@ -21,151 +18,42 @@ button{margin:3px}
 HP:<span id="hp"></span>
 MP:<span id="mp"></span><br>
 ATK:<span id="atk"></span>
-DEF:<span id="def"></span>
-SPD:<span id="spd"></span><br>
-Gold:<span id="gold"></span><br>
-Quest:<span id="questText">無</span>
+Gold:<span id="gold"></span>
 </div>
 
-<div id="panel"></div>
-
-<div id="bottom">
-WASD移動｜Space普攻｜1~3技能｜E互動｜Z包包
-</div>
+<div id="hint">WASD移動｜Space攻擊｜1~3技能｜E互動｜Z包包</div>
 
 <script>
-/* ================= 基本 ================= */
 const c=game,ctx=c.getContext("2d");
-let keys={},scene="village";
-const SAVE_KEY="pixelRPG_full";
+let keys={};
 
-/* ================= 玩家 ================= */
 const player={
- x:480,y:360,w:20,h:28,
- hp:120,maxHp:120,
- mp:60,maxMp:60,
- atk:5,def:0,speed:2,lv:1
+ x:460,y:300,w:20,h:28,
+ hp:100,maxHp:100,
+ mp:50,maxMp:50,
+ atk:6,speed:2
 };
-let gold=50;
+let gold=20;
 
-/* ================= 裝備 & 包包 ================= */
-const inventory=[];
-const equipment={weapon:null,armor:null,boots:null};
+/* ===== 建築物 ===== */
+const buildings=[
+ {x:200,y:200,w:120,h:90,name:"商店",type:"shop"},
+ {x:380,y:180,w:160,h:110,name:"公會",type:"guild"}
+];
 
-const ITEMS={
- sword:{name:"鐵劍",type:"weapon",atk:5},
- armor:{name:"皮甲",type:"armor",def:3},
- boots:{name:"皮靴",type:"boots",speed:1}
+/* ===== 怪物 ===== */
+let enemies=[
+ {name:"史萊姆",lv:1,x:600,y:320,hp:30,maxHp:30,atk:2}
+];
+
+/* ===== 技能 ===== */
+const skills={
+ 1:{mp:5,dmg:20,color:"#f60"},
+ 2:{mp:8,dmg:30,color:"#6cf"},
+ 3:{mp:10,dmg:40,color:"#fcf"}
 };
 
-/* ================= 怪物 ================= */
-let enemies=[];
-function spawnEnemies(){
- enemies=[];
- if(scene==="forest"){
-  enemies.push(
-   {name:"史萊姆",lv:1,hp:30,maxHp:30,atk:2,x:200,y:250},
-   {name:"哥布林",lv:2,hp:50,maxHp:50,atk:4,x:420,y:260}
-  );
- }
-}
-
-/* ================= 畫面 ================= */
-function drawPlayer(){
- ctx.fillStyle="#f2c9ac";ctx.fillRect(player.x+6,player.y,8,8);
- ctx.fillStyle="#3a6ee8";ctx.fillRect(player.x+4,player.y+8,12,10);
- ctx.fillStyle="#222";
- ctx.fillRect(player.x+4,player.y+18,4,8);
- ctx.fillRect(player.x+12,player.y+18,4,8);
-}
-
-/* ================= 戰鬥 ================= */
-function attack(){
- enemies.forEach(e=>{
-  if(Math.hypot(player.x-e.x,player.y-e.y)<40){
-   e.hp-=Math.max(1,player.atk-e.atk*0.2);
-   if(e.hp<=0)kill(e);
-  }
- });
-}
-function kill(e){
- gold+=Math.floor(Math.random()*11)+5;
- enemies=enemies.filter(x=>x!==e);
- save();
-}
-
-/* ================= 商店 ================= */
-function openShop(){
- panel.innerHTML=`
- <h3>商店</h3>
- <b>藥水商人</b><br>
- <button onclick="buyPotion('hp')">HP藥水 10G</button>
- <button onclick="buyPotion('mp')">MP藥水 10G</button><br><br>
- <b>武器商人</b><br>
- <button onclick="buyItem('sword',30)">鐵劍 30G</button>
- <button onclick="buyItem('armor',25)">皮甲 25G</button>
- <button onclick="buyItem('boots',20)">皮靴 20G</button><br>
- <button onclick="closePanel()">關閉</button>`;
- panel.style.display="block";
-}
-function buyPotion(t){
- if(gold<10)return;
- gold-=10;
- if(t==="hp")player.hp=Math.min(player.maxHp,player.hp+40);
- if(t==="mp")player.mp=Math.min(player.maxMp,player.mp+30);
- save();
-}
-function buyItem(id,price){
- if(gold<price)return;
- gold-=price;
- inventory.push({...ITEMS[id]});
- save();
-}
-
-/* ================= 包包 ================= */
-function openBag(){
- let h="<h3>包包</h3>";
- inventory.forEach((it,i)=>{
-  h+=`${it.name}
-  <button onclick="equip(${i})">裝備</button><br>`;
- });
- h+="<button onclick='closePanel()'>關閉</button>";
- panel.innerHTML=h;
- panel.style.display="block";
-}
-function equip(i){
- const it=inventory[i];
- if(it.type==="weapon")equipment.weapon=it;
- if(it.type==="armor")equipment.armor=it;
- if(it.type==="boots")equipment.boots=it;
- recalcStats();
- save();
-}
-
-/* ================= 數值 ================= */
-function recalcStats(){
- player.atk=5+(equipment.weapon?.atk||0);
- player.def=(equipment.armor?.def||0);
- player.speed=2+(equipment.boots?.speed||0);
-}
-
-/* ================= 存檔 ================= */
-function save(){
- localStorage.setItem(SAVE_KEY,JSON.stringify({
-  player, gold, inventory, equipment
- }));
-}
-function load(){
- const s=JSON.parse(localStorage.getItem(SAVE_KEY));
- if(!s)return;
- Object.assign(player,s.player);
- gold=s.gold;
- inventory.push(...s.inventory);
- Object.assign(equipment,s.equipment);
- recalcStats();
-}
-
-/* ================= 更新 ================= */
+/* ===== 更新 ===== */
 function update(){
  if(keys.w)player.y-=player.speed;
  if(keys.s)player.y+=player.speed;
@@ -174,20 +62,57 @@ function update(){
 
  enemies.forEach(e=>{
   if(Math.hypot(player.x-e.x,player.y-e.y)<24){
-   player.hp=Math.max(0,player.hp-(e.atk-player.def)*0.05);
+   player.hp=Math.max(0,player.hp-e.atk*0.05);
   }
  });
 }
 
-/* ================= 繪製 ================= */
+/* ===== 攻擊 ===== */
+function attack(dmg){
+ enemies.forEach(e=>{
+  if(Math.hypot(player.x-e.x,player.y-e.y)<60){
+   e.hp-=dmg;
+   if(e.hp<=0){
+    gold+=10;
+    enemies=enemies.filter(x=>x!==e);
+   }
+  }
+ });
+}
+
+/* ===== 技能 ===== */
+function cast(i){
+ const s=skills[i];
+ if(!s||player.mp<s.mp)return;
+ player.mp-=s.mp;
+ attack(s.dmg);
+}
+
+/* ===== 繪製 ===== */
 function render(){
- ctx.fillStyle=scene==="forest"?"#103814":"#bda78a";
+ ctx.fillStyle="#3a7";
  ctx.fillRect(0,0,960,540);
 
- drawPlayer();
+ /* 建築 */
+ buildings.forEach(b=>{
+  ctx.fillStyle="#654";
+  ctx.fillRect(b.x,b.y,b.w,b.h);
+  ctx.fillStyle="#000";
+  ctx.fillRect(b.x+b.w/2-10,b.y+b.h-20,20,20); // 門
+  ctx.fillStyle="#fff";
+  ctx.fillText(b.name,b.x+10,b.y+15);
+ });
 
+ /* 玩家 */
+ ctx.fillStyle="#f2c9ac";
+ ctx.fillRect(player.x+6,player.y,8,8);
+ ctx.fillStyle="#36c";
+ ctx.fillRect(player.x+4,player.y+8,12,10);
+
+ /* 怪物 */
  enemies.forEach(e=>{
-  ctx.fillStyle="#6a4";ctx.fillRect(e.x,e.y,22,22);
+  ctx.fillStyle="#6a4";
+  ctx.fillRect(e.x,e.y,22,22);
   ctx.fillStyle="#f33";
   ctx.fillRect(e.x,e.y-6,22*(e.hp/e.maxHp),4);
   ctx.fillStyle="#fff";
@@ -197,25 +122,32 @@ function render(){
  hp.innerText=Math.round(player.hp);
  mp.innerText=Math.round(player.mp);
  atk.innerText=player.atk;
- def.innerText=player.def;
- spd.innerText=player.speed;
  gold.innerText=gold;
 }
 
-/* ================= 控制 ================= */
-window.addEventListener("keydown",e=>{
- keys[e.key]=true;
- if(e.key===" ")attack();
- if(e.key==="z")openBag();
- if(e.key==="e"&&scene==="village")openShop();
-});
-window.addEventListener("keyup",e=>keys[e.key]=false);
+/* ===== 互動 ===== */
+function interact(){
+ buildings.forEach(b=>{
+  if(Math.hypot(player.x-(b.x+b.w/2),player.y-(b.y+b.h))<40){
+   alert(b.name+"（內部系統下一步會做）");
+  }
+ });
+}
 
-/* ================= 主迴圈 ================= */
-load();
-setInterval(save,5000);
-spawnEnemies();
-(function loop(){update();render();requestAnimationFrame(loop);})();
+/* ===== 控制 ===== */
+window.addEventListener("keydown",e=>{
+ keys[e.key.toLowerCase()]=true;
+ if(e.key===" ")attack(player.atk);
+ if(e.key>="1"&&e.key<="3")cast(Number(e.key));
+ if(e.key.toLowerCase()==="e")interact();
+});
+window.addEventListener("keyup",e=>keys[e.key.toLowerCase()]=false);
+
+/* ===== 主迴圈 ===== */
+(function loop(){
+ update();render();
+ requestAnimationFrame(loop);
+})();
 </script>
 </body>
 </html>
