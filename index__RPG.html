@@ -406,6 +406,53 @@ for(let i=0;i<6;i++){
   name:"哥布林",lv:1
  });
 }
+/* =====================================================
+   修正 1：怪物真正死亡（移除）
+===================================================== */
+function cleanDeadMonsters(){
+ for(let i=monsters.length-1;i>=0;i--){
+  if(monsters[i].hp<=0){
+   monsters.splice(i,1);
+  }
+ }
+}
+
+/* =====================================================
+   修正 2：技能不再造成回血錯覺
+===================================================== */
+const _skill = skill;
+skill = function(n){
+ if(player.mp<5) return;
+ player.mp -= 5;
+
+ monsters.forEach(m=>{
+  const d = Math.hypot(player.x-m.x,player.y-m.y);
+  if(d < 80){
+   m.hp -= player.atk * (1 + n*0.5);
+   if(m.hp < 0) m.hp = 0;
+  }
+ });
+
+ cleanDeadMonsters();
+};
+
+/* =====================================================
+   修正 3：普攻後也清理屍體（保險）
+===================================================== */
+const _normalAttack = normalAttack;
+normalAttack = function(){
+ _normalAttack();
+ cleanDeadMonsters();
+};
+
+/* =====================================================
+   修正 4：怪物更新時不再處理死怪
+===================================================== */
+const _updateMonsters = updateMonsters;
+updateMonsters = function(){
+ monsters = monsters.filter(m=>m.hp>0);
+ _updateMonsters();
+};
 </script>
 </body>
 </html>
