@@ -301,6 +301,111 @@ update = function(){
  if(!indoor) oldUpdate();
  updateMonsters();
 };
+/* =====================================================
+   修復：室內可移動 + 不覆寫原系統
+===================================================== */
+
+/* 修正 update：室內也允許移動 */
+const _update = update;
+update = function(){
+ // 玩家移動永遠存在
+ if(keys.w)player.y-=player.speed;
+ if(keys.s)player.y+=player.speed;
+ if(keys.a)player.x-=player.speed;
+ if(keys.d)player.x+=player.speed;
+
+ player.x=Math.max(0,Math.min(canvas.width-player.w,player.x));
+ player.y=Math.max(0,Math.min(canvas.height-player.h,player.y));
+
+ // 室外才更新怪物
+ if(scene==="forest" && !indoor){
+  updateMonsters();
+ }
+};
+
+/* =====================================================
+   普攻（空白鍵，不刷新）
+===================================================== */
+function normalAttack(){
+ if(scene!=="forest") return;
+
+ monsters.forEach(m=>{
+  const d=Math.hypot(player.x-m.x,player.y-m.y);
+  if(d<40){
+   m.hp -= player.atk;
+   if(m.hp<=0){
+    m.hp=0;
+    gold += 5;
+   }
+  }
+ });
+}
+
+window.addEventListener("keydown",e=>{
+ if(e.code==="Space"){
+  e.preventDefault();
+  normalAttack();
+ }
+});
+
+/* =====================================================
+   技能（1~3）
+===================================================== */
+function skill(n){
+ if(player.mp<5) return;
+ player.mp-=5;
+
+ monsters.forEach(m=>{
+  const d=Math.hypot(player.x-m.x,player.y-m.y);
+  if(d<80){
+   m.hp -= player.atk*(1+n*0.5);
+  }
+ });
+}
+
+window.addEventListener("keydown",e=>{
+ if(e.key==="1")skill(1);
+ if(e.key==="2")skill(2);
+ if(e.key==="3")skill(3);
+});
+
+/* =====================================================
+   包包（Z）
+===================================================== */
+let bagOpen=false;
+
+window.addEventListener("keydown",e=>{
+ if(e.key.toLowerCase()==="z"){
+  bagOpen=!bagOpen;
+ }
+});
+
+/* 顯示包包 */
+const _render = render;
+render=function(){
+ _render();
+
+ if(bagOpen){
+  ctx.fillStyle="rgba(0,0,0,0.8)";
+  ctx.fillRect(200,100,560,340);
+  ctx.fillStyle="#fff";
+  ctx.fillText("背包（之後會放裝備）",420,130);
+ }
+};
+
+/* =====================================================
+   怪物數量補強
+===================================================== */
+monsters.length=0;
+for(let i=0;i<6;i++){
+ monsters.push({
+  x:200+Math.random()*400,
+  y:150+Math.random()*200,
+  hp:30,maxHp:30,
+  atk:3,speed:0.5,
+  name:"哥布林",lv:1
+ });
+}
 </script>
 </body>
 </html>
