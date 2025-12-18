@@ -157,207 +157,150 @@ window.addEventListener("keyup",e=>{
  render();
  requestAnimationFrame(loop);
 })();
-/* =========================================================
-   第 2 段：室內場景 / 任務 / 商店 / 戰鬥 / 包包裝備
-   ========================================================= */
+/* ===========================
+   室內場景系統（修正版）
+=========================== */
 
-/* ===== 新場景 ===== */
-let subScene = null; // null / guild / shop
+let indoor = null; // null / "guild" / "shop"
 
-/* ===== 任務 ===== */
-const quests = [
- {id:1,name:"清除史萊姆",target:"史萊姆",need:3,progress:0,reward:30},
- {id:2,name:"擊退哥布林",target:"哥布林",need:3,progress:0,reward:50}
-];
-let activeQuest = null;
-
-/* ===== 森林怪物 ===== */
-let enemies = [];
-function spawnForestEnemies(){
- enemies=[
-  {name:"史萊姆",lv:1,x:400,y:300,hp:30,maxHp:30,atk:2},
-  {name:"史萊姆",lv:1,x:500,y:260,hp:30,maxHp:30,atk:2},
-  {name:"哥布林",lv:2,x:600,y:340,hp:45,maxHp:45,atk:4}
- ];
+/* 進入室內 */
+function enterIndoor(type){
+ indoor = type;
+ player.x = canvas.width/2 - 10;
+ player.y = canvas.height - 80;
 }
 
-/* ===== 包包 / 裝備 ===== */
-const inventory=[];
-const equipment={weapon:null,armor:null,boots:null};
-const items={
- sword:{name:"鐵劍",atk:5,type:"weapon"},
- armor:{name:"皮甲",def:3,type:"armor"},
- boots:{name:"皮靴",speed:1,type:"boots"}
-};
+/* 離開室內 */
+function exitIndoor(){
+ indoor = null;
+ scene = "village";
+ player.x = 460;
+ player.y = 360;
+}
 
-/* ===== 改寫場景切換 ===== */
-const _changeScene = changeScene;
-changeScene = function(s){
- _changeScene(s);
- subScene = null;
- if(s==="forest") spawnForestEnemies();
-};
+/* 覆寫互動 */
+function interact(){
+ if(indoor){
+  // 出口門
+  if(player.y > canvas.height - 100){
+   exitIndoor();
+  }
+  return;
+ }
 
-/* ===== 改寫互動 ===== */
-const _interact = interact;
-interact = function(){
- if(scene==="village"){
+ if(scene === "village"){
   for(const k in buildings){
-   const b=buildings[k];
-   const d=Math.hypot(
+   const b = buildings[k];
+   const d = Math.hypot(
     player.x-(b.x+b.w/2),
     player.y-(b.y+b.h)
    );
-   if(d<40){
-    subScene = (k==="guild") ? "guild" : "shop";
-    return;
+   if(d < 40){
+    enterIndoor(k);
    }
   }
  }
- else if(scene==="forest"){
-  return;
- }
-};
+}
 
-/* ===== 戰鬥 ===== */
-function attack(){
- if(scene!=="forest")return;
- enemies.forEach(e=>{
-  if(Math.hypot(player.x-e.x,player.y-e.y)<60){
-   e.hp-=player.atk;
-   if(activeQuest && e.name===activeQuest.target){
-    activeQuest.progress++;
-   }
-   if(e.hp<=0){
-    gold+=10;
-   }
+/* 室內繪製 */
+function drawIndoor(){
+ ctx.fillStyle = indoor === "guild" ? "#2c3e50" : "#3a2c1f";
+ ctx.fillRect(0,0,canvas.width,canvas.height);
+
+ // 櫃檯
+ ctx.fillStyle="#654";
+ ctx.fillRect(canvas.width/2-120,120,240,40);
+
+ // NPC
+ ctx.fillStyle="#f2c9ac";
+ ctx.fillRect(canvas.width/2-10,80,20,30);
+
+ ctx.fillStyle="#fff";
+ ctx.fillText(
+  indoor==="guild"?"公會櫃檯":"商店店員",
+  canvas.width/2-40,70
+ );
+
+ // 出口門
+ ctx.fillStyle="#000";
+ ctx.fillRect(canvas.width/2-20,canvas.height-40,40,40);
+ ctx.fillText("出口",canvas.width/2-16,canvas.height-45);
+}
+
+/* ===========================
+   MP 自動回復
+=========================== */
+setInterval(()=>{
+ player.mp = Math.min(player.maxMp, player.mp + 1);
+},1000);
+
+/* ===========================
+   怪物（森林）
+=========================== */
+const monsters=[
+ {x:300,y:200,hp:30,maxHp:30,atk:3,speed:0.6,name:"哥布林",lv:1}
+];
+
+/* 怪物更新 */
+function updateMonsters(){
+ if(scene!=="forest" || indoor) return;
+
+ monsters.forEach(m=>{
+  const dx = player.x - m.x;
+  const dy = player.y - m.y;
+  const d = Math.hypot(dx,dy);
+
+  if(d>1){
+   m.x += dx/d * m.speed;
+   m.y += dy/d * m.speed;
+  }
+
+  // 碰到玩家
+  if(d<20){
+   player.hp = Math.max(0, player.hp - m.atk*0.02);
   }
  });
- enemies=enemies.filter(e=>e.hp>0);
- if(activeQuest && activeQuest.progress>=activeQuest.need){
-  alert("任務完成！回公會領獎");
- }
 }
 
-/* ===== 技能 ===== */
-function castSkill(i){
- if(scene!=="forest")return;
- const cost=[0,5,8,12][i];
- if(player.mp<cost)return;
- player.mp-=cost;
- attack();
+/* 怪物繪製 */
+function drawMonsters(){
+ if(scene!=="forest" || indoor) return;
+
+ monsters.forEach(m=>{
+  ctx.fillStyle="#0f0";
+  ctx.fillRect(m.x,m.y,20,20);
+
+  // 血條
+  ctx.fillStyle="#f00";
+  ctx.fillRect(m.x,m.y-6,20*(m.hp/m.maxHp),4);
+
+  ctx.fillStyle="#fff";
+  ctx.fillText(`${m.name} Lv.${m.lv}`,m.x-10,m.y-10);
+ });
 }
 
-/* ===== 商店購買 ===== */
-function buyItem(id,price){
- if(gold<price)return;
- gold-=price;
- inventory.push({...items[id]});
-}
-
-/* ===== 裝備 ===== */
-function equipItem(i){
- const it=inventory[i];
- equipment[it.type]=it;
- player.atk=6+(equipment.weapon?.atk||0);
- player.def=(equipment.armor?.def||0);
- player.speed=2+(equipment.boots?.speed||0);
-}
-
-/* ===== 繪製補充 ===== */
-const _render = render;
+/* ===========================
+   覆寫 render
+=========================== */
+const oldRender = render;
 render = function(){
- _render();
-
- /* ===== 森林怪物 ===== */
- if(scene==="forest"){
-  enemies.forEach(e=>{
-   ctx.fillStyle="#6a4";
-   ctx.fillRect(e.x,e.y,22,22);
-   ctx.fillStyle="#f33";
-   ctx.fillRect(e.x,e.y-6,22*(e.hp/e.maxHp),4);
-   ctx.fillStyle="#fff";
-   ctx.fillText(`${e.name} Lv${e.lv}`,e.x-10,e.y-10);
-  });
- }
-
- /* ===== 公會室內 ===== */
- if(subScene==="guild"){
-  ctx.fillStyle="#2b2b3a";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle="#555";
-  ctx.fillRect(300,180,360,40);
-  ctx.fillStyle="#ffd";
-  ctx.fillRect(470,150,20,20);
-  ctx.fillStyle="#fff";
-  ctx.fillText("公會櫃檯",430,140);
-
-  if(!activeQuest){
-   ctx.fillText("E：接任務",410,260);
-  }else{
-   ctx.fillText(
-    `${activeQuest.name} ${activeQuest.progress}/${activeQuest.need}`,
-    350,260
-   );
-   if(activeQuest.progress>=activeQuest.need){
-    ctx.fillText("E：領取報酬",410,290);
-   }
-  }
-  ctx.fillText("往下走離開",410,480);
- }
-
- /* ===== 商店室內 ===== */
- if(subScene==="shop"){
-  ctx.fillStyle="#3a2b2b";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle="#ffd";
-  ctx.fillRect(350,200,20,20);
-  ctx.fillRect(550,200,20,20);
-  ctx.fillStyle="#fff";
-  ctx.fillText("藥水商人",310,190);
-  ctx.fillText("武器商人",510,190);
-  ctx.fillText("E：購買鐵劍(30G)",470,260);
-  ctx.fillText("往下走離開",410,480);
+ if(indoor){
+  drawIndoor();
+  drawPlayer();
+ }else{
+  oldRender();
+  drawMonsters();
  }
 };
 
-/* ===== 室內互動 ===== */
-window.addEventListener("keydown",e=>{
- if(e.key.toLowerCase()!=="e")return;
-
- if(subScene==="guild"){
-  if(!activeQuest){
-   activeQuest={...quests[0]};
-  }else if(activeQuest.progress>=activeQuest.need){
-   gold+=activeQuest.reward;
-   activeQuest=null;
-  }
- }
- else if(subScene==="shop"){
-  buyItem("sword",30);
- }
-});
-
-/* ===== 包包 ===== */
-window.addEventListener("keydown",e=>{
- if(e.key.toLowerCase()!=="z")return;
- let text="包包：\n";
- inventory.forEach((it,i)=>{
-  text+=`${i+1}. ${it.name}\n`;
- });
- const idx=prompt(text+"輸入編號裝備");
- if(idx){
-  equipItem(idx-1);
- }
-});
-
-/* ===== 攻擊 / 技能 ===== */
-window.addEventListener("keydown",e=>{
- if(e.key===" ")attack();
- if(e.key>="1"&&e.key<="3")castSkill(Number(e.key));
-}); 
+/* ===========================
+   覆寫 update
+=========================== */
+const oldUpdate = update;
+update = function(){
+ if(!indoor) oldUpdate();
+ updateMonsters();
+};
 </script>
 </body>
 </html>
-
-
